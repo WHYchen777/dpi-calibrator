@@ -57,6 +57,17 @@ const HEADSHOT_THRESHOLD = 15;
 const BODY_THRESHOLD = 30;
 const TRAIL_LENGTH = 6;
 
+// 游戏内人物移速参考（米/秒）：Valorant 5.4 · CS2 250units/s≈4.76 · Apex ≈5.7 · Overwatch 5.5
+// 换算到屏幕速度（px/s）= 移速 × PX_PER_MPS，约等于 30-40m 交战距离下的屏幕角速度，贴近实战且整体更慢
+const GAME_MOVE_MPS: Record<GameType, number> = {
+  valorant: 5.4,
+  csgo: 4.76,
+  apex: 5.7,
+  overwatch: 5.5,
+  other: 5.0,
+};
+const PX_PER_MPS = 28;
+
 // ── 绘制辅助 ──────────────────────────────────────────
 
 function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -323,7 +334,7 @@ function TrackingTest({ onComplete, gameType }: TrackingTestProps) {
     if (isValCS) {
       // Valorant/CSGO：短距离peek移动
       if (enemy.state === 'moving_right') {
-        enemy.vx = 200;
+        enemy.vx = Math.round(GAME_MOVE_MPS[gameType] * PX_PER_MPS);
         enemy.vy = 0;
         if (enemy.x >= enemy.strafeTarget) {
           enemy.state = 'pause_right';
@@ -338,7 +349,7 @@ function TrackingTest({ onComplete, gameType }: TrackingTestProps) {
           enemy.strafeTarget = margin + 100 + Math.random() * (w - margin * 2 - 200);
         }
       } else if (enemy.state === 'moving_left') {
-        enemy.vx = -200;
+        enemy.vx = -Math.round(GAME_MOVE_MPS[gameType] * PX_PER_MPS);
         enemy.vy = 0;
         if (enemy.x <= enemy.strafeTarget) {
           enemy.state = 'pause_left';
@@ -361,7 +372,7 @@ function TrackingTest({ onComplete, gameType }: TrackingTestProps) {
       if (enemy.stateTimer > 1200 + Math.random() * 800) {
         enemy.stateTimer = 0;
         const angle = Math.random() * Math.PI * 2;
-        const speed = 250 + Math.random() * 400;
+        const speed = Math.round(GAME_MOVE_MPS.apex * PX_PER_MPS) + Math.random() * 80;
         enemy.vx = Math.cos(angle) * speed;
         enemy.vy = Math.sin(angle) * speed * 0.5;
         enemy.strafeTarget = angle; // reuse as angle storage
@@ -396,7 +407,7 @@ function TrackingTest({ onComplete, gameType }: TrackingTestProps) {
       const inDash = (enemy as any)._dashDuration !== undefined && (enemy as any)._dashDuration < 300;
       if (inDash) {
         (enemy as any)._dashDuration += dt * 1000;
-        enemy.vx = ((enemy as any)._dashDir) * 550;
+        enemy.vx = ((enemy as any)._dashDir) * Math.round(GAME_MOVE_MPS.overwatch * PX_PER_MPS * 2.2);
       } else {
         (enemy as any)._dashDuration = undefined;
         // 普通平移
@@ -405,7 +416,7 @@ function TrackingTest({ onComplete, gameType }: TrackingTestProps) {
           enemy.strafeTarget = margin + 100 + Math.random() * (w - margin * 2 - 200);
         }
         const dir = enemy.x < enemy.strafeTarget ? 1 : -1;
-        enemy.vx = dir * 280;
+        enemy.vx = dir * Math.round(GAME_MOVE_MPS.overwatch * PX_PER_MPS);
         if (Math.abs(enemy.x - enemy.strafeTarget) < 30) {
           enemy.strafeTarget = margin + 100 + Math.random() * (w - margin * 2 - 200);
         }
@@ -414,7 +425,7 @@ function TrackingTest({ onComplete, gameType }: TrackingTestProps) {
       enemy.y = enemy.baseY + Math.sin(enemy.bobPhase) * 20;
     } else {
       // other：简单正弦
-      enemy.vx = 200;
+      enemy.vx = Math.round(GAME_MOVE_MPS.other * PX_PER_MPS);
       enemy.bobPhase += dt * 2.5;
       enemy.y = enemy.baseY + Math.sin(enemy.bobPhase) * 60;
     }

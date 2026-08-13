@@ -1,7 +1,6 @@
 ﻿/**
  * Web Audio API sound engine — all sounds synthesized, no external files.
- * 爆头音效参考 CS2 "dink" 风格；固定靶命中音支持五阶音调循环（由低到高），
- * 连续五次爆头触发参考无畏契约五杀的特殊音效。
+ * 爆头音效参考 CS2 "dink" 风格；固定靶命中音支持五阶音调循环（由低到高）。
  */
 
 let audioCtx: AudioContext | null = null;
@@ -113,22 +112,6 @@ export function playHeadshotSoundPitched(step: number) {
   playDink(pitch, 0.55);
   playNoise(0.03, 0.18, 4600, 'highpass');
   playTone(92 * Math.max(1, ratio * 0.75), 'sine', 0.17, 0.38, 40);
-}
-
-/** 连续五次爆头特殊音效（参考无畏契约五杀）：快速上扬琶音 + 收尾和弦 */
-export function playAceSound() {
-  const notes = [587, 740, 880, 1175];
-  notes.forEach((freq, i) => {
-    setTimeout(() => {
-      playTone(freq, 'sawtooth', 0.24, 0.2, freq * 1.6);
-      playTone(freq / 2, 'triangle', 0.26, 0.16);
-      playNoise(0.03, 0.08, 5000, 'highpass');
-    }, i * 95);
-  });
-  setTimeout(() => {
-    notes.forEach((freq) => playTone(freq, 'square', 0.65, 0.07, freq * 1.04));
-    playDink(1900, 0.42);
-  }, notes.length * 95 + 20);
 }
 
 // ── Public API ───────────────────────────────────────────────

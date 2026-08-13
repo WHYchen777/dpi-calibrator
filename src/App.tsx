@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import {
   Crosshair,
   Target,
@@ -21,7 +21,6 @@ import FlickTest from './components/FlickTest';
 import SmoothTrackingTest from './components/SmoothTrackingTest';
 import ResultPanel from './components/ResultPanel';
 import AnimatedBackground from './components/AnimatedBackground';
-
 import GlowButton from './components/GlowButton';
 import GlassCard from './components/GlassCard';
 import CrosshairSettings from './components/CrosshairSettings';
@@ -39,11 +38,11 @@ const GAME_OPTIONS: { value: UserSettings['gameType']; label: string; icon: Reac
   { value: 'other', label: '其他', icon: <Gamepad2 size={16} /> },
 ];
 
-const TEST_STEPS: { key: TestPhase; label: string; desc: string; icon: ReactNode }[] = [
-  { key: 'static', label: '静态精度', desc: '定位 + 反应', icon: <Crosshair size={14} /> },
-  { key: 'tracking', label: '动态跟枪', desc: '追踪能力', icon: <Target size={14} /> },
-  { key: 'flick', label: '甩枪瞬狙', desc: '反应 + 微调', icon: <Rocket size={14} /> },
-  { key: 'smooth', label: '平滑跟枪', desc: '稳定操控', icon: <Activity size={14} /> },
+const TEST_OPTIONS: { key: TestPhase; label: string; desc: string; icon: ReactNode; accent: string }[] = [
+  { key: 'static', label: '静态精度', desc: '定位 + 反应', icon: <Crosshair size={16} />, accent: '#00ff88' },
+  { key: 'tracking', label: '动态跟枪', desc: '追踪能力', icon: <Target size={16} />, accent: '#ff4d4d' },
+  { key: 'flick', label: '甩枪瞬狙', desc: '反应 + 微调', icon: <Rocket size={16} />, accent: '#22d3ee' },
+  { key: 'smooth', label: '平滑跟枪', desc: '稳定操控', icon: <Activity size={16} />, accent: '#a78bfa' },
 ];
 
 // Typewriter effect
@@ -85,9 +84,20 @@ function SectionHeader({ icon, title, hint }: { icon: ReactNode; title: string; 
   );
 }
 
+interface ResultsState {
+  static: ClickResult[] | null;
+  tracking: TrackingResultData | null;
+  flick: FlickResultData | null;
+  smooth: SmoothResultData | null;
+}
+
+const EMPTY_RESULTS: ResultsState = { static: null, tracking: null, flick: null, smooth: null };
+const ALL_TESTS: TestPhase[] = ['static', 'tracking', 'flick', 'smooth'];
+
 function App() {
   const [currentStep, setCurrentStep] = useState<Step>('home');
-  const [testPhase, setTestPhase] = useState<TestPhase>('static');
+  const [testQueue, setTestQueue] = useState<TestPhase[]>(ALL_TESTS);
+  const [selectedTests, setSelectedTests] = useState<TestPhase[]>(ALL_TESTS);
   const [userSettings, setUserSettings] = useState<UserSettings>({
     mouseDPI: 800,
     gameSensitivity: 1,
@@ -96,10 +106,7 @@ function App() {
     gameName: '',
   });
   const [staticTargetCount, setStaticTargetCount] = useState(15);
-  const [staticResults, setStaticResults] = useState<ClickResult[] | null>(null);
-  const [trackingResults, setTrackingResults] = useState<TrackingResultData | null>(null);
-  const [flickResults, setFlickResults] = useState<FlickResultData | null>(null);
-  const [smoothResults, setSmoothResults] = useState<SmoothResultData | null>(null);
+  const [results, setResults] = useState<ResultsState>(EMPTY_RESULTS);
 
   const edpi = useMemo(
     () => Math.round(userSettings.mouseDPI * userSettings.gameSensitivity * 10) / 10,
@@ -108,37 +115,35 @@ function App() {
 
   const { text: subtitle } = useTypewriter('校准你的战斗手感', 80);
 
+  const toggleTest = (key: TestPhase) => {
+    setSelectedTests((prev) =>
+      prev.includes(key) ? prev.filter((t) => t !== key) : [...prev, key],
+    );
+  };
+
   const handleStartTest = () => {
-    setTestPhase('static');
+    if (selectedTests.length === 0) return;
+    setResults(EMPTY_RESULTS);
+    setTestQueue(selectedTests);
     setCurrentStep('testing');
   };
 
-  const handleStaticComplete = (results: ClickResult[]) => {
-    setStaticResults(results);
-    setTestPhase('tracking');
-  };
-
-  const handleTrackingComplete = (results: TrackingResultData) => {
-    setTrackingResults(results);
-    setTestPhase('flick');
-  };
-
-  const handleFlickComplete = (results: FlickResultData) => {
-    setFlickResults(results);
-    setTestPhase('smooth');
-  };
-
-  const handleSmoothComplete = (results: SmoothResultData) => {
-    setSmoothResults(results);
-    setCurrentStep('result');
+  const handleTestComplete = (
+    key: TestPhase,
+    data: ClickResult[] | TrackingResultData | FlickResultData | SmoothResultData,
+  ) => {
+    setResults((prev) => ({ ...prev, [key]: data }));
+    const remaining = testQueue.filter((t) => t !== key);
+    if (remaining.length === 0) {
+      setCurrentStep('result');
+    } else {
+      setTestQueue(remaining);
+    }
   };
 
   const handleRestart = () => {
-    setStaticResults(null);
-    setTrackingResults(null);
-    setFlickResults(null);
-    setSmoothResults(null);
-    setTestPhase('static');
+    setResults(EMPTY_RESULTS);
+    setTestQueue(selectedTests);
     setCurrentStep('home');
   };
 
@@ -267,21 +272,51 @@ function App() {
             </div>
           </GlassCard>
 
-          {/* 测试流程 */}
+          {/* 测试选择 */}
           <GlassCard className="p-6 sm:p-7 mb-8 animate-fade-slide" style={{ animationDelay: '180ms' }}>
-            <SectionHeader icon={<Activity size={14} className="text-[#22d3ee]" />} title="测试流程" hint="4 项科学指标" />
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {TEST_STEPS.map((s, i) => (
-                <div key={s.key} className="protocol-step">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[#00ff88]">{s.icon}</span>
-                    <span className="text-[9px] font-mono text-[#8b93a7]/60">0{i + 1}</span>
-                  </div>
-                  <p className="text-[11px] font-bold text-[#e8ecf4]">{s.label}</p>
-                  <p className="text-[10px] text-[#8b93a7]">{s.desc}</p>
-                </div>
-              ))}
+            <SectionHeader icon={<Activity size={14} className="text-[#22d3ee]" />} title="选择测试" hint="可多选 · 按顺序进行" />
+
+            <div className="grid grid-cols-2 gap-2">
+              {TEST_OPTIONS.map((opt) => {
+                const active = selectedTests.includes(opt.key);
+                return (
+                  <button
+                    key={opt.key}
+                    onClick={() => toggleTest(opt.key)}
+                    className="flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all duration-200 cursor-pointer text-left"
+                    style={{
+                      background: active
+                        ? 'linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))'
+                        : 'rgba(255,255,255,0.02)',
+                      border: active ? `1px solid ${opt.accent}66` : '1px solid rgba(255,255,255,0.07)',
+                      boxShadow: active ? `0 0 18px ${opt.accent}1a` : undefined,
+                      opacity: active ? 1 : 0.45,
+                    }}
+                    aria-pressed={active}
+                  >
+                    <span style={{ color: active ? opt.accent : '#8b93a7' }}>{opt.icon}</span>
+                    <span className="flex-1">
+                      <span className="block text-[12px] font-bold" style={{ color: active ? '#e8ecf4' : '#8b93a7' }}>
+                        {opt.label}
+                      </span>
+                      <span className="block text-[10px] text-[#8b93a7]/70">{opt.desc}</span>
+                    </span>
+                    <span
+                      className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold"
+                      style={{
+                        border: active ? `1px solid ${opt.accent}` : '1px solid rgba(255,255,255,0.2)',
+                        color: active ? opt.accent : '#8b93a7',
+                      }}
+                    >
+                      {active ? '✓' : ''}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
+            <p className="text-[10px] text-[#8b93a7]/60 mt-2.5 font-mono">
+              当前选择 {selectedTests.length}/4 项{selectedTests.length === 0 ? '，请至少选择一项' : ''}
+            </p>
 
             {/* 固定靶数量设置 */}
             <div className="mt-5 pt-4 border-t border-white/5">
@@ -317,8 +352,16 @@ function App() {
           </GlassCard>
 
           {/* 开始按钮 */}
-          <GlowButton onClick={handleStartTest} variant="accent" size="lg" pulse className="w-full animate-fade-slide" style={{ animationDelay: '240ms' }}>
-            开始校准测试
+          <GlowButton
+            onClick={handleStartTest}
+            variant="accent"
+            size="lg"
+            pulse
+            disabled={selectedTests.length === 0}
+            className="w-full animate-fade-slide"
+            style={{ animationDelay: '240ms' }}
+          >
+            开始校准测试{selectedTests.length > 0 ? `（${selectedTests.length} 项）` : ''}
           </GlowButton>
           <p className="text-center text-[11px] text-[#8b93a7]/60 mt-4 font-mono animate-fade-slide" style={{ animationDelay: '300ms' }}>
             建议使用桌面浏览器 · 保持鼠标 1:1 直线移动
@@ -330,35 +373,49 @@ function App() {
 
   // ── TESTING ───────────────────────────────────────────
   if (currentStep === 'testing') {
+    const phase = testQueue[0];
     return (
       <>
-        {testPhase === 'static' && (
-          <StaticClickTest onComplete={handleStaticComplete} gameType={userSettings.gameType} targetCount={staticTargetCount} />
+        {phase === 'static' && (
+          <StaticClickTest
+            onComplete={(r) => handleTestComplete('static', r)}
+            gameType={userSettings.gameType}
+            targetCount={staticTargetCount}
+          />
         )}
-        {testPhase === 'tracking' && (
-          <TrackingTest onComplete={handleTrackingComplete} gameType={userSettings.gameType} />
+        {phase === 'tracking' && (
+          <TrackingTest
+            onComplete={(r) => handleTestComplete('tracking', r)}
+            gameType={userSettings.gameType}
+          />
         )}
-        {testPhase === 'flick' && (
-          <FlickTest onComplete={handleFlickComplete} gameType={userSettings.gameType} />
+        {phase === 'flick' && (
+          <FlickTest
+            onComplete={(r) => handleTestComplete('flick', r)}
+            gameType={userSettings.gameType}
+          />
         )}
-        {testPhase === 'smooth' && (
-          <SmoothTrackingTest onComplete={handleSmoothComplete} gameType={userSettings.gameType} />
+        {phase === 'smooth' && (
+          <SmoothTrackingTest
+            onComplete={(r) => handleTestComplete('smooth', r)}
+            gameType={userSettings.gameType}
+          />
         )}
       </>
     );
   }
 
   // ── RESULT ────────────────────────────────────────────
-  if (currentStep === 'result' && staticResults && trackingResults && flickResults && smoothResults) {
+  if (currentStep === 'result') {
     return (
       <div className="relative min-h-screen">
         <AnimatedBackground />
         <div className="relative z-10">
           <ResultPanel
-            staticResults={staticResults}
-            trackingResults={trackingResults}
-            flickResults={flickResults}
-            smoothResults={smoothResults}
+            staticResults={results.static}
+            trackingResults={results.tracking}
+            flickResults={results.flick}
+            smoothResults={results.smooth}
             userSettings={{ ...userSettings, edpi }}
             onRestart={handleRestart}
           />

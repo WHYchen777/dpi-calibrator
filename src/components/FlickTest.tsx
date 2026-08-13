@@ -1,4 +1,4 @@
-﻿import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import type { ClickResult, FlickResultData, FlickRoundResult } from '../types/calibration';
 import {
   playHeadshotSound,
@@ -68,7 +68,7 @@ interface FloatingText {
 }
 
 const FLICK_MARGIN = 90;
-const MICRO_TIMEOUT = 900;
+const MICRO_TIMEOUT = 1500; // 金色核心（微调靶）持续时长（ms），比旧版更充裕
 const ROUND_SENS: Record<'A' | 'B', number> = { A: 1, B: 1.2 };
 
 function generateTarget(gameType: GameType, w: number, h: number): Target {
@@ -415,6 +415,9 @@ export default function FlickTest({ onComplete, targetCount = 12, gameType }: Fl
     if (microShotsRef.current > 0) {
       setMicroRate(Math.round((microHitsRef.current / microShotsRef.current) * 100));
     }
+    // 金色核心（微调靶）未解决前不推进流程：不加载新靶位、不切换轮次，
+    // 避免微调未命中时其他靶位被提前消耗/误记轮次
+    if (microRef.current) return;
     if (mainShots >= roundTargets.current) {
       if (roundRef.current === 'A') {
         playPhaseSound();

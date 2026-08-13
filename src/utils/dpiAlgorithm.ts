@@ -1,4 +1,4 @@
-﻿import type { ClickResult } from '../types/calibration';
+import type { ClickResult } from '../types/calibration';
 
 /** 计算命中精度，距离<15像素算命中，返回命中率(0-100) */
 export function calculateAccuracy(clicks: ClickResult[]): number {
@@ -54,20 +54,26 @@ export function calculateSmoothStability(distances: number[]): number {
   return Math.round(score * 100) / 100;
 }
 
-/** 综合瞄准评分：静态精度 25% + 静态一致性 15% + 甩枪精度 25% + 跟枪爆头率 20% + 平滑稳定度 15% */
+/** 综合瞄准评分：静态精度 25% + 静态一致性 15% + 甩枪精度 25% + 跟枪爆头率 20% + 平滑稳定度 15%。
+ *  未执行的测试维度可不传，权重会在已执行的维度间自动归一化。 */
 export function calculateAimScore(parts: {
-  staticAccuracy: number;
-  staticConsistency: number;
-  flickAccuracy: number;
-  trackingRatio: number;
-  smoothStability: number;
+  staticAccuracy?: number;
+  staticConsistency?: number;
+  flickAccuracy?: number;
+  trackingRatio?: number;
+  smoothStability?: number;
 }): number {
-  const score =
-    parts.staticAccuracy * 0.25 +
-    parts.staticConsistency * 0.15 +
-    parts.flickAccuracy * 0.25 +
-    parts.trackingRatio * 0.2 +
-    parts.smoothStability * 0.15;
+  const dims: { value: number | undefined; weight: number }[] = [
+    { value: parts.staticAccuracy, weight: 25 },
+    { value: parts.staticConsistency, weight: 15 },
+    { value: parts.flickAccuracy, weight: 25 },
+    { value: parts.trackingRatio, weight: 20 },
+    { value: parts.smoothStability, weight: 15 },
+  ];
+  const provided = dims.filter((d) => typeof d.value === 'number');
+  const totalWeight = provided.reduce((s, d) => s + d.weight, 0);
+  if (totalWeight === 0) return 0;
+  const score = provided.reduce((s, d) => s + (d.value ?? 0) * d.weight, 0) / totalWeight;
   return Math.round(score * 100) / 100;
 }
 

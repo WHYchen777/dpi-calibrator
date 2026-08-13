@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -37,10 +37,10 @@ import GlowButton from './GlowButton';
 import ProgressRing from './ProgressRing';
 
 interface ResultPanelProps {
-  staticResults: ClickResult[];
-  trackingResults: TrackingResultData;
-  flickResults: FlickResultData;
-  smoothResults: SmoothResultData;
+  staticResults?: ClickResult[] | null;
+  trackingResults?: TrackingResultData | null;
+  flickResults?: FlickResultData | null;
+  smoothResults?: SmoothResultData | null;
   userSettings: UserSettings;
   onRestart: () => void;
 }
@@ -78,41 +78,57 @@ export default function ResultPanel({
   userSettings,
   onRestart,
 }: ResultPanelProps) {
-  const accuracy = calculateAccuracy(staticResults);
-  const consistency = calculateConsistency(staticResults);
-  const flick = useMemo(() => calculateFlickScore(flickResults.clicks), [flickResults]);
+  const staticSafe = staticResults ?? [];
+  const hasStatic = staticSafe.length > 0;
+  const hasTracking = !!trackingResults;
+  const hasFlick = !!flickResults;
+  const hasSmooth = !!smoothResults;
+
+  const accuracy = calculateAccuracy(staticSafe);
+  const consistency = calculateConsistency(staticSafe);
+  const flick = useMemo(
+    () =>
+      flickResults
+        ? calculateFlickScore(flickResults.clicks)
+        : { accuracy: 0, headshotRate: 0, avgDistance: 0, avgReactionTime: 0 },
+    [flickResults],
+  );
   const aimScore = calculateAimScore({
-    staticAccuracy: accuracy,
-    staticConsistency: consistency,
-    flickAccuracy: flick.accuracy,
-    trackingRatio: trackingResults.headshotTrackingRatio,
-    smoothStability: smoothResults.stability,
+    ...(hasStatic ? { staticAccuracy: accuracy, staticConsistency: consistency } : {}),
+    ...(hasFlick ? { flickAccuracy: flick.accuracy } : {}),
+    ...(hasTracking ? { trackingRatio: trackingResults!.headshotTrackingRatio } : {}),
+    ...(hasSmooth ? { smoothStability: smoothResults!.stability } : {}),
   });
-  const dpiSuggestion = suggestDPI(userSettings.edpi, accuracy, consistency, aimScore);
+  const dpiSuggestion = suggestDPI(
+    userSettings.edpi,
+    hasStatic ? accuracy : 0,
+    hasStatic ? consistency : 0,
+    aimScore,
+  );
   const rating = getRating(aimScore);
 
-  const headshots = staticResults.filter((r) => r.isHeadshot).length;
-  const bodyHits = staticResults.filter((r) => r.isBodyHit).length;
+  const headshots = staticSafe.filter((r) => r.isHeadshot).length;
+  const bodyHits = staticSafe.filter((r) => r.isBodyHit).length;
   const totalHits = headshots + bodyHits;
 
-  const avgReaction = staticResults.length > 0
-    ? Math.round(staticResults.reduce((s, r) => s + r.reactionTime, 0) / staticResults.length) : 0;
-  const reactionTimes = staticResults.map((r) => r.reactionTime);
+  const avgReaction = staticSafe.length > 0
+    ? Math.round(staticSafe.reduce((s, r) => s + r.reactionTime, 0) / staticSafe.length) : 0;
+  const reactionTimes = staticSafe.map((r) => r.reactionTime);
   const fastest = reactionTimes.length > 0 ? Math.min(...reactionTimes) : 0;
   const slowest = reactionTimes.length > 0 ? Math.max(...reactionTimes) : 0;
 
-  const headshotTrackRatio = trackingResults.headshotTrackingRatio || 0;
+  const headshotTrackRatio = trackingResults?.headshotTrackingRatio ?? 0;
   const trackGrade = getTrackingGrade(headshotTrackRatio);
 
   // 甩枪 A/B 灵敏度对比数据（兼容旧记录：无 rounds 时仅显示整体）
-  const flickRoundA = flickResults.rounds?.find((r) => r.round === 'A') ?? null;
-  const flickRoundB = flickResults.rounds?.find((r) => r.round === 'B') ?? null;
+  const flickRoundA = flickResults?.rounds?.find((r) => r.round === 'A') ?? null;
+  const flickRoundB = flickResults?.rounds?.find((r) => r.round === 'B') ?? null;
   const prefLabel =
-    flickResults.preference === 'B' ? 'B 档（+20% 速度）更顺手' :
-    flickResults.preference === 'A' ? 'A 档（当前速度）更顺手' :
-    flickResults.preference === 'equal' ? '两档手感接近' : '未对比';
+    flickResults?.preference === 'B' ? 'B 档（+20% 速度）更顺手' :
+    flickResults?.preference === 'A' ? 'A 档（当前速度）更顺手' :
+    flickResults?.preference === 'equal' ? '两档手感接近' : '未对比';
 
-  const dpiAdjust = adjustDPIByPreference(dpiSuggestion.suggestedDPI, flickResults.preference ?? null);
+  const dpiAdjust = adjustDPIByPreference(dpiSuggestion.suggestedDPI, flickResults?.preference ?? null);
   const finalSuggestedDPI = dpiAdjust.dpi;
   const dpiReason = dpiSuggestion.reason + (dpiAdjust.note ? ' · ' + dpiAdjust.note : '');
 
@@ -122,15 +138,15 @@ export default function ResultPanel({
   const [dpiTab, setDpiTab] = useState<'sens' | 'dpi'>('sens');
   const [trackingExpanded, setTrackingExpanded] = useState(false);
   const [saved, setSaved] = useState(false);
-  const maxPhaseDist = Math.max(...trackingResults.phaseResults.map((p) => p.avgDistance), 1);
+  const maxPhaseDist = Math.max(...(trackingResults?.phaseResults.map((p) => p.avgDistance) ?? [0]), 1);
 
   const reactionData = useMemo(
-    () => staticResults.map((r, i) => ({ shot: i + 1, ms: Math.round(r.reactionTime) })),
-    [staticResults],
+    () => staticSafe.map((r, i) => ({ shot: i + 1, ms: Math.round(r.reactionTime) })),
+    [staticSafe],
   );
 
   const smoothData = useMemo(() => {
-    const dists = smoothResults.distances;
+    const dists = smoothResults?.distances ?? [];
     if (dists.length === 0) return [];
     const step = Math.max(1, Math.floor(dists.length / 60));
     return dists
@@ -139,12 +155,23 @@ export default function ResultPanel({
   }, [smoothResults]);
 
   const radarData = [
-    { ability: '静态精度', value: Math.round(accuracy) },
-    { ability: '一致性', value: Math.round(consistency) },
-    { ability: '甩枪精度', value: Math.round(flick.accuracy) },
-    { ability: '跟枪爆头', value: Math.round(headshotTrackRatio) },
-    { ability: '平滑稳定', value: Math.round(smoothResults.stability) },
+    ...(hasStatic
+      ? [
+          { ability: '静态精度', value: Math.round(accuracy) },
+          { ability: '一致性', value: Math.round(consistency) },
+        ]
+      : []),
+    ...(hasFlick ? [{ ability: '甩枪精度', value: Math.round(flick.accuracy) }] : []),
+    ...(hasTracking ? [{ ability: '跟枪爆头', value: Math.round(headshotTrackRatio) }] : []),
+    ...(hasSmooth ? [{ ability: '平滑稳定', value: Math.round(smoothResults!.stability) }] : []),
   ];
+
+  const doneLabels = [
+    hasStatic ? '静态精度' : null,
+    hasTracking ? '动态跟枪' : null,
+    hasFlick ? '甩枪瞬狙' : null,
+    hasSmooth ? '平滑跟枪' : null,
+  ].filter(Boolean).join(' · ');
 
   return (
     <div className="min-h-screen py-8 px-4 animate-fade-slide">
@@ -180,13 +207,14 @@ export default function ResultPanel({
               </div>
             </div>
             <p className="text-sm text-[#8b93a7]">
-              四维评估：静态精度 · 动态跟枪 · 甩枪瞬狙 · 平滑跟枪
+              已评估：{doneLabels || '暂无数据'}
             </p>
           </div>
         </div>
 
         {/* ── Row 1: 精度 / 反应 / 甩枪 ──────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {hasStatic && (
           <GlassCard className="p-5">
             <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-3" style={{ fontFamily: "'Orbitron', sans-serif" }}>
               ◈ 静态精度
@@ -201,10 +229,12 @@ export default function ResultPanel({
             <div className="flex gap-3 mt-3 text-xs">
               <span>💀 <span style={{ color: '#ff4d4d' }}>{headshots}</span> <span className="text-[#8b93a7]">爆头</span></span>
               <span>🎯 <span style={{ color: '#fff' }}>{bodyHits}</span> <span className="text-[#8b93a7]">身体</span></span>
-              <span className="text-[#8b93a7]">{totalHits}/{staticResults.length} 命中</span>
+              <span className="text-[#8b93a7]">{totalHits}/{staticSafe.length} 命中</span>
             </div>
           </GlassCard>
+          )}
 
+          {hasStatic && (
           <GlassCard className="p-5">
             <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-3" style={{ fontFamily: "'Orbitron', sans-serif" }}>
               ⏱ 反应时间
@@ -218,7 +248,9 @@ export default function ResultPanel({
               <span className="text-[#8b93a7]">最慢 <span style={{ color: '#ff6b35' }}>{Math.round(slowest)}ms</span></span>
             </div>
           </GlassCard>
+          )}
 
+          {hasFlick && (
           <GlassCard className="p-5">
             <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-3" style={{ fontFamily: "'Orbitron', sans-serif" }}>
               ⚡ 甩枪精度 · A/B 对比
@@ -260,10 +292,12 @@ export default function ResultPanel({
               </div>
             )}
           </GlassCard>
+          )}
         </div>
 
         {/* ── Row 2: 跟枪 + 平滑 ────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {hasTracking && (
           <GlassCard className="p-5">
             <div className="flex items-center justify-between mb-3">
               <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7]" style={{ fontFamily: "'Orbitron', sans-serif" }}>
@@ -331,7 +365,9 @@ export default function ResultPanel({
               </div>
             )}
           </GlassCard>
+          )}
 
+          {hasSmooth && (
           <GlassCard className="p-5 flex flex-col items-center justify-center">
             <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-4" style={{ fontFamily: "'Orbitron', sans-serif" }}>
               ◉ 平滑跟枪稳定度
@@ -339,12 +375,14 @@ export default function ResultPanel({
             <ProgressRing progress={smoothResults.stability} size={130} strokeWidth={8} color={smoothResults.stability >= 80 ? '#00ff88' : smoothResults.stability >= 60 ? '#ffd700' : '#ff6b35'} />
             <div className="flex gap-4 mt-3 text-xs">
               <span className="text-[#8b93a7]">平均偏差 <span style={{ color: '#00ff88' }}>{smoothResults.avgDistance}px</span></span>
-              <span className="text-[#8b93a7]">完美跟枪 <span style={{ color: '#ff4d4d' }}>{smoothResults.headshotRatio}%</span></span>
+              <span className="text-[#8b93a7]">完美跟枪 <span style={{ color: '#ff4d4d' }}>{smoothResults!.headshotRatio}%</span></span>
             </div>
           </GlassCard>
+          )}
         </div>
 
         {/* ── 能力雷达图 ──────────────────────── */}
+        {radarData.length > 0 && (
         <GlassCard className="p-5">
           <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-4" style={{ fontFamily: "'Orbitron', sans-serif" }}>
             🕸 能力雷达图
@@ -375,13 +413,16 @@ export default function ResultPanel({
             </div>
           </div>
         </GlassCard>
+        )}
 
         {/* ── 数据曲线 ──────────────────────────── */}
+        {(hasStatic || hasSmooth) && (
         <GlassCard className="p-5">
           <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-4" style={{ fontFamily: "'Orbitron', sans-serif" }}>
             📈 数据曲线
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {hasStatic && (
             <div>
               <p className="text-[11px] text-[#8b93a7] mb-2 font-mono">反应时间分布（每次点击，ms）</p>
               <ResponsiveContainer width="100%" height={180}>
@@ -394,6 +435,9 @@ export default function ResultPanel({
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            )}
+
+            {hasSmooth && (
             <div>
               <p className="text-[11px] text-[#8b93a7] mb-2 font-mono">平滑跟枪偏差曲线（越贴近 0 越好）</p>
               <ResponsiveContainer width="100%" height={180}>
@@ -412,8 +456,10 @@ export default function ResultPanel({
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+            )}
           </div>
         </GlassCard>
+        )}
 
         {/* ── DPI 建议 ──────────────────────────── */}
         <GlassCard className="p-6">
@@ -491,46 +537,54 @@ export default function ResultPanel({
           <GlowButton onClick={onRestart} variant="accent" pulse className="flex-1">重新测试</GlowButton>
           <GlowButton
             onClick={() => {
+              const sessionTests: CalibrationSession['tests'] = [];
+              if (hasStatic) {
+                sessionTests.push({
+                  type: 'static',
+                  clicks: staticSafe,
+                  accuracy,
+                  avgReactionTime: avgReaction,
+                  consistency,
+                });
+              }
+              if (hasTracking && trackingResults) {
+                sessionTests.push({
+                  type: 'tracking',
+                  clicks: trackingResults.distances.map((d) => ({
+                    x: 0, y: 0,
+                    targetX: 0, targetY: 0,
+                    distance: d, reactionTime: 0,
+                    isHeadshot: false, isBodyHit: false,
+                  })),
+                  accuracy: 0,
+                  avgReactionTime: 0,
+                  consistency: 0,
+                });
+              }
+              if (hasFlick && flickResults) {
+                sessionTests.push({
+                  type: 'flick',
+                  clicks: flickResults.clicks,
+                  accuracy: flick.accuracy,
+                  avgReactionTime: flick.avgReactionTime,
+                  consistency: calculateConsistency(flickResults.clicks.filter((c) => !c.isMicro)),
+                });
+              }
+              if (hasSmooth && smoothResults) {
+                sessionTests.push({
+                  type: 'smooth',
+                  clicks: [],
+                  accuracy: smoothResults.stability,
+                  avgReactionTime: 0,
+                  consistency: 0,
+                });
+              }
               const session: CalibrationSession = {
                 id: Date.now().toString(36),
                 date: new Date().toISOString(),
                 currentDPI: userSettings.edpi,
                 suggestedDPI: finalSuggestedDPI,
-                tests: [
-                  {
-                    type: 'static',
-                    clicks: staticResults,
-                    accuracy,
-                    avgReactionTime: avgReaction,
-                    consistency,
-                  },
-                  {
-                    type: 'tracking',
-                    clicks: trackingResults.distances.map((d) => ({
-                      x: 0, y: 0,
-                      targetX: 0, targetY: 0,
-                      distance: d, reactionTime: 0,
-                      isHeadshot: false, isBodyHit: false,
-                    })),
-                    accuracy: 0,
-                    avgReactionTime: 0,
-                    consistency: 0,
-                  },
-                  {
-                    type: 'flick',
-                    clicks: flickResults.clicks,
-                    accuracy: flick.accuracy,
-                    avgReactionTime: flick.avgReactionTime,
-                    consistency: calculateConsistency(flickResults.clicks.filter((c) => !c.isMicro)),
-                  },
-                  {
-                    type: 'smooth',
-                    clicks: [],
-                    accuracy: smoothResults.stability,
-                    avgReactionTime: 0,
-                    consistency: 0,
-                  },
-                ],
+                tests: sessionTests,
                 overallScore: aimScore,
                 recommendation: dpiReason,
               };
