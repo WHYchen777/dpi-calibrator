@@ -21,7 +21,7 @@ import FlickTest from './components/FlickTest';
 import SmoothTrackingTest from './components/SmoothTrackingTest';
 import ResultPanel from './components/ResultPanel';
 import AnimatedBackground from './components/AnimatedBackground';
-import MouseTrail from './components/MouseTrail';
+
 import GlowButton from './components/GlowButton';
 import GlassCard from './components/GlassCard';
 import CrosshairSettings from './components/CrosshairSettings';
@@ -95,6 +95,7 @@ function App() {
     gameType: 'valorant',
     gameName: '',
   });
+  const [staticTargetCount, setStaticTargetCount] = useState(15);
   const [staticResults, setStaticResults] = useState<ClickResult[] | null>(null);
   const [trackingResults, setTrackingResults] = useState<TrackingResultData | null>(null);
   const [flickResults, setFlickResults] = useState<FlickResultData | null>(null);
@@ -146,7 +147,6 @@ function App() {
     return (
       <div className="relative min-h-screen flex items-center justify-center overflow-hidden py-12">
         <AnimatedBackground />
-        <MouseTrail />
 
         <div className="relative z-10 w-full max-w-xl mx-auto px-5">
           {/* Header */}
@@ -282,6 +282,38 @@ function App() {
                 </div>
               ))}
             </div>
+
+            {/* 固定靶数量设置 */}
+            <div className="mt-5 pt-4 border-t border-white/5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] uppercase tracking-[0.14em] text-[#8b93a7]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>固定靶目标数</span>
+                <span className="text-lg font-bold" style={{ fontFamily: "'JetBrains Mono', monospace", color: '#00ff88' }}>{staticTargetCount}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setStaticTargetCount((v) => Math.max(5, v - 5))}
+                  className="w-9 h-9 rounded-lg text-sm font-bold transition-all cursor-pointer"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.09)', color: '#8b93a7' }}
+                  aria-label="减少目标数"
+                >−5</button>
+                <input
+                  type="range"
+                  min={5}
+                  max={30}
+                  value={staticTargetCount}
+                  onChange={(e) => setStaticTargetCount(Number(e.target.value))}
+                  className="flex-1 accent-[#00ff88] cursor-pointer"
+                  aria-label="固定靶目标数"
+                />
+                <button
+                  onClick={() => setStaticTargetCount((v) => Math.min(30, v + 5))}
+                  className="w-9 h-9 rounded-lg text-sm font-bold transition-all cursor-pointer"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.09)', color: '#8b93a7' }}
+                  aria-label="增加目标数"
+                >+5</button>
+              </div>
+              <p className="text-[10px] text-[#8b93a7]/60 mt-2 font-mono">固定靶数量 5-30，决定测试时长与采样精度</p>
+            </div>
           </GlassCard>
 
           {/* 开始按钮 */}
@@ -300,9 +332,8 @@ function App() {
   if (currentStep === 'testing') {
     return (
       <>
-        <MouseTrail />
         {testPhase === 'static' && (
-          <StaticClickTest onComplete={handleStaticComplete} gameType={userSettings.gameType} />
+          <StaticClickTest onComplete={handleStaticComplete} gameType={userSettings.gameType} targetCount={staticTargetCount} />
         )}
         {testPhase === 'tracking' && (
           <TrackingTest onComplete={handleTrackingComplete} gameType={userSettings.gameType} />
@@ -322,7 +353,6 @@ function App() {
     return (
       <div className="relative min-h-screen">
         <AnimatedBackground />
-        <MouseTrail />
         <div className="relative z-10">
           <ResultPanel
             staticResults={staticResults}

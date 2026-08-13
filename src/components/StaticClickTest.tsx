@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import type { ClickResult } from '../types/calibration';
-import { playHeadshotSound, playBodyHitSound, playMissSound, playCompleteSound } from '../utils/soundEngine';
+import { playMissSound, playCompleteSound, playHeadshotSoundPitched, playBodyHitSoundPitched, playAceSound } from '../utils/soundEngine';
 import CountdownOverlay from './CountdownOverlay';
 import { useCrosshair, drawCrosshairStyled } from '../hooks/useCrosshair';
 import AnimatedBackground from './AnimatedBackground';
@@ -249,6 +249,8 @@ function StaticClickTest({
   const floatingTextsRef = useRef<FloatingText[]>([]);
   const animRef = useRef({ start: 0, target: null as Target | null, phase: 'idle' as 'idle' | 'spawning' | 'playing' | 'feedback' });
   const hitResultRef = useRef<HitResult>('none');
+  const hitToneRef = useRef(0); // 命中音调循环 0-4
+  const headshotStreakRef = useRef(0); // 连续爆头计数
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const totalTargets = useRef(targetCount);
   const completedRef = useRef(false);
@@ -483,15 +485,28 @@ function StaticClickTest({
       };
       resultsRef.current = [...resultsRef.current, result];
 
-      // 特效
+      // 特效（命中音调五阶循环，由低到高；连续五爆头触发五杀音效）
+      const tone = hitToneRef.current;
       if (hitType === 'headshot') {
+        headshotStreakRef.current++;
         spawnParticles(target.x, target.y, 20);
         spawnFloatingText(target.x, target.y - 30, 'HEADSHOT', '#7c3aed');
-        playHeadshotSound();
+        if (headshotStreakRef.current >= 5) {
+          headshotStreakRef.current = 0;
+          hitToneRef.current = 0;
+          spawnFloatingText(target.x, target.y - 60, 'ACE!', '#ffd700');
+          playAceSound();
+        } else {
+          playHeadshotSoundPitched(tone);
+          hitToneRef.current = (tone + 1) % 5;
+        }
       } else if (hitType === 'hit') {
+        headshotStreakRef.current = 0;
         spawnFloatingText(target.x, target.y - 30, 'HIT', '#ffffff');
-        playBodyHitSound();
+        playBodyHitSoundPitched(tone);
+        hitToneRef.current = (tone + 1) % 5;
       } else {
+        headshotStreakRef.current = 0;
         spawnFloatingText(target.x, target.y - 30, 'MISS', '#ff6666');
         playMissSound();
       }

@@ -506,13 +506,4 @@ body::before {
   50% { opacity: 0.35; }
 }
 
-/* ══════════ 鼠标轨迹 ══════════ */
 
-.cursor-trail {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  pointer-events: none;
-  z-index: 5;
-}

@@ -1,6 +1,7 @@
 ﻿/**
  * Web Audio API sound engine — all sounds synthesized, no external files.
- * 爆头音效参考 CS2 "dink" 风格：高频金属泛音 + 低频身体命中感。
+ * 爆头音效参考 CS2 "dink" 风格；固定靶命中音支持五阶音调循环（由低到高），
+ * 连续五次爆头触发参考无畏契约五杀的特殊音效。
  */
 
 let audioCtx: AudioContext | null = null;
@@ -94,21 +95,52 @@ function playDink(base: number, volume: number) {
   });
 }
 
+/** 固定靶命中音五阶音调倍率（由低到高） */
+const HIT_TONE_RATIOS = [1, 1.26, 1.587, 2, 2.52];
+
+/** 身体命中 — 支持五阶音调循环 */
+export function playBodyHitSoundPitched(step: number) {
+  const ratio = HIT_TONE_RATIOS[Math.abs(step) % HIT_TONE_RATIOS.length];
+  playTone(300 * ratio, 'triangle', 0.09, 0.3, 130 * ratio);
+  playNoise(0.05, 0.14, 1600 * Math.min(2, ratio), 'lowpass');
+  playNoise(0.025, 0.08, 3400 * Math.min(1.5, ratio), 'bandpass');
+}
+
+/** 爆头 — 支持五阶音调循环 */
+export function playHeadshotSoundPitched(step: number) {
+  const ratio = HIT_TONE_RATIOS[Math.abs(step) % HIT_TONE_RATIOS.length];
+  const pitch = (1700 + Math.random() * 240) * ratio;
+  playDink(pitch, 0.55);
+  playNoise(0.03, 0.18, 4600, 'highpass');
+  playTone(92 * Math.max(1, ratio * 0.75), 'sine', 0.17, 0.38, 40);
+}
+
+/** 连续五次爆头特殊音效（参考无畏契约五杀）：快速上扬琶音 + 收尾和弦 */
+export function playAceSound() {
+  const notes = [587, 740, 880, 1175];
+  notes.forEach((freq, i) => {
+    setTimeout(() => {
+      playTone(freq, 'sawtooth', 0.24, 0.2, freq * 1.6);
+      playTone(freq / 2, 'triangle', 0.26, 0.16);
+      playNoise(0.03, 0.08, 5000, 'highpass');
+    }, i * 95);
+  });
+  setTimeout(() => {
+    notes.forEach((freq) => playTone(freq, 'square', 0.65, 0.07, freq * 1.04));
+    playDink(1900, 0.42);
+  }, notes.length * 95 + 20);
+}
+
 // ── Public API ───────────────────────────────────────────────
 
 /** 爆头（CS2 风格 dink）：清脆金属高音 + 低频身体撞击 */
 export function playHeadshotSound() {
-  const pitch = 1850 + Math.random() * 260;
-  playDink(pitch, 0.55);
-  playNoise(0.03, 0.18, 4600, 'highpass');
-  playTone(92, 'sine', 0.17, 0.38, 40);
+  playHeadshotSoundPitched(0);
 }
 
 /** 身体命中 — 闷实的撞击感 + 轻微护甲摩擦 */
 export function playBodyHitSound() {
-  playTone(300, 'triangle', 0.09, 0.3, 130);
-  playNoise(0.05, 0.14, 1600, 'lowpass');
-  playNoise(0.025, 0.08, 3400, 'bandpass');
+  playBodyHitSoundPitched(0);
 }
 
 /** 脱靶 — 轻微的空气声 */
