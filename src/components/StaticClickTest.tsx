@@ -216,7 +216,7 @@ function Overlay({
         </div>
         {/* Right: label */}
         <span className="text-[10px] uppercase tracking-[0.3em] text-[#00ff8860]" style={{ fontFamily: "'Orbitron', sans-serif" }}>
-          静态测试
+          静态精度
         </span>
       </div>
     </div>
@@ -252,6 +252,8 @@ function StaticClickTest({
   const totalTargets = useRef(targetCount);
   const completedRef = useRef(false);
   const scaleRef = useRef(1);
+  const mouseRef = useRef({ x: canvasSize.w / 2, y: canvasSize.h / 2, active: false });
+  const drawStaticRef = useRef<() => void>(() => {});
 
   // ── resize ─────────────────────────────────────────────
 
@@ -309,7 +311,12 @@ function StaticClickTest({
     ctx.fillStyle = 'rgba(15, 15, 35, 0.88)';
     ctx.fillRect(0, 0, w, h);
     drawGrid(ctx, w, h);
-    drawCrosshairStyled(ctx, w / 2, h / 2, crosshair.settings);
+    drawCrosshairStyled(
+      ctx,
+      mouseRef.current.active ? mouseRef.current.x : w / 2,
+      mouseRef.current.active ? mouseRef.current.y : h / 2,
+      crosshair.settings,
+    );
 
     // ── 人物渲染 ──
     const target = targetRef.current;
@@ -410,7 +417,12 @@ function StaticClickTest({
     ctx.fillStyle = 'rgba(15, 15, 35, 0.88)';
     ctx.fillRect(0, 0, canvasSize.w, canvasSize.h);
     drawGrid(ctx, canvasSize.w, canvasSize.h);
-    drawCrosshairStyled(ctx, canvasSize.w / 2, canvasSize.h / 2, crosshair.settings);
+    drawCrosshairStyled(
+      ctx,
+      mouseRef.current.active ? mouseRef.current.x : canvasSize.w / 2,
+      mouseRef.current.active ? mouseRef.current.y : canvasSize.h / 2,
+      crosshair.settings,
+    );
     const t = targetRef.current;
     if (t) drawCharacter(ctx, t, scaleRef.current, 1);
   }, [canvasSize]);
@@ -524,6 +536,14 @@ function StaticClickTest({
     };
   }, [countingDown, showNext]);
 
+  drawStaticRef.current = drawStatic;
+
+  // 鼠标跟随：更新准星位置并重绘静态帧
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    mouseRef.current = { x: e.clientX, y: e.clientY, active: true };
+    drawStaticRef.current();
+  }, []);
+
   useEffect(() => {
     drawStatic();
   }, [canvasSize, drawStatic]);
@@ -542,11 +562,12 @@ function StaticClickTest({
         width={canvasSize.w}
         height={canvasSize.h}
         onClick={handleClick}
-        className="absolute inset-0 cursor-crosshair"
+        className="absolute inset-0 cursor-none"
+        onMouseMove={handleMouseMove}
         style={{ touchAction: 'none' }}
       />
 
-      {countingDown && <CountdownOverlay onFinish={handleCountdownFinish} />}
+      {countingDown && <CountdownOverlay title="静态精度测试" onFinish={handleCountdownFinish} />}
 
       <Overlay
         remaining={remaining}

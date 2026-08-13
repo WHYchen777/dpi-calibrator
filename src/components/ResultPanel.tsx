@@ -1,10 +1,29 @@
-import { useState } from 'react';
-import type { ClickResult, UserSettings, TrackingResultData, CalibrationSession } from '../types/calibration';
+﻿import { useState, useMemo } from 'react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  AreaChart,
+  Area,
+} from 'recharts';
+import type {
+  ClickResult,
+  UserSettings,
+  TrackingResultData,
+  FlickResultData,
+  SmoothResultData,
+  CalibrationSession,
+} from '../types/calibration';
 import {
   calculateAccuracy,
   calculateConsistency,
+  calculateFlickScore,
+  calculateAimScore,
   suggestDPI,
-  calculateOverallScore,
 } from '../utils/dpiAlgorithm';
 import { saveSession } from '../utils/storage';
 import GlassCard from './GlassCard';
@@ -14,37 +33,57 @@ import ProgressRing from './ProgressRing';
 interface ResultPanelProps {
   staticResults: ClickResult[];
   trackingResults: TrackingResultData;
+  flickResults: FlickResultData;
+  smoothResults: SmoothResultData;
   userSettings: UserSettings;
   onRestart: () => void;
 }
 
 function getRating(score: number): { label: string; color: string; bg: string } {
-  if (score >= 90) return { label: 'S', color: '#ffd700', bg: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,180,0,0.05))' };
-  if (score >= 75) return { label: 'A', color: '#00ff88', bg: 'linear-gradient(135deg, rgba(0,255,136,0.12), rgba(0,200,100,0.03))' };
-  if (score >= 60) return { label: 'B', color: '#7c3aed', bg: 'linear-gradient(135deg, rgba(124,58,237,0.12), rgba(100,40,200,0.03))' };
-  return { label: 'C', color: '#ff6b35', bg: 'linear-gradient(135deg, rgba(255,107,53,0.12), rgba(255,80,30,0.03))' };
+  if (score >= 90) return { label: 'S', color: '#ffd700', bg: 'linear-gradient(160deg, rgba(255,215,0,0.16), rgba(255,180,0,0.04))' };
+  if (score >= 75) return { label: 'A', color: '#00ff88', bg: 'linear-gradient(160deg, rgba(0,255,136,0.14), rgba(0,200,100,0.03))' };
+  if (score >= 60) return { label: 'B', color: '#a78bfa', bg: 'linear-gradient(160deg, rgba(167,139,250,0.14), rgba(124,58,237,0.03))' };
+  return { label: 'C', color: '#ff6b35', bg: 'linear-gradient(160deg, rgba(255,107,53,0.14), rgba(255,80,30,0.03))' };
 }
 
 function getTrackingGrade(ratio: number): { grade: string; color: string } {
   if (ratio > 90) return { grade: 'S', color: '#ffd700' };
   if (ratio > 70) return { grade: 'A', color: '#00ff88' };
-  if (ratio > 50) return { grade: 'B', color: '#7c3aed' };
+  if (ratio > 50) return { grade: 'B', color: '#a78bfa' };
   return { grade: 'C', color: '#ff6b35' };
 }
 
 const PHASE_LABELS = ['Ⅰ', 'Ⅱ', 'Ⅲ'];
 
+const tooltipStyle = {
+  background: 'rgba(10,12,20,0.92)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: '10px',
+  fontSize: '11px',
+  fontFamily: "'JetBrains Mono', monospace",
+  color: '#e8ecf4',
+};
+
 export default function ResultPanel({
   staticResults,
   trackingResults,
+  flickResults,
+  smoothResults,
   userSettings,
   onRestart,
 }: ResultPanelProps) {
   const accuracy = calculateAccuracy(staticResults);
   const consistency = calculateConsistency(staticResults);
-  const dpiSuggestion = suggestDPI(userSettings.edpi, accuracy, consistency);
-  const overallScore = calculateOverallScore(accuracy, consistency);
-  const rating = getRating(overallScore);
+  const flick = useMemo(() => calculateFlickScore(flickResults.clicks), [flickResults]);
+  const aimScore = calculateAimScore({
+    staticAccuracy: accuracy,
+    staticConsistency: consistency,
+    flickAccuracy: flick.accuracy,
+    trackingRatio: trackingResults.headshotTrackingRatio,
+    smoothStability: smoothResults.stability,
+  });
+  const dpiSuggestion = suggestDPI(userSettings.edpi, accuracy, consistency, aimScore);
+  const rating = getRating(aimScore);
 
   const headshots = staticResults.filter((r) => r.isHeadshot).length;
   const bodyHits = staticResults.filter((r) => r.isBodyHit).length;
@@ -67,85 +106,134 @@ export default function ResultPanel({
   const [saved, setSaved] = useState(false);
   const maxPhaseDist = Math.max(...trackingResults.phaseResults.map((p) => p.avgDistance), 1);
 
+  const reactionData = useMemo(
+    () => staticResults.map((r, i) => ({ shot: i + 1, ms: Math.round(r.reactionTime) })),
+    [staticResults],
+  );
+
+  const smoothData = useMemo(() => {
+    const dists = smoothResults.distances;
+    if (dists.length === 0) return [];
+    const step = Math.max(1, Math.floor(dists.length / 60));
+    return dists
+      .filter((_, i) => i % step === 0)
+      .map((d, i) => ({ t: i, dist: Math.round(d * 10) / 10 }));
+  }, [smoothResults]);
+
   return (
-    <div className="min-h-screen py-8 px-4 animate-fade-slide" style={{ backgroundColor: 'transparent' }}>
-      <div className="w-full max-w-2xl mx-auto space-y-6">
+    <div className="min-h-screen py-8 px-4 animate-fade-slide">
+      <div className="w-full max-w-3xl mx-auto space-y-5">
 
         {/* ── Hero Banner ─────────────────────────── */}
-        <div className="rounded-2xl p-8 text-center relative overflow-hidden" style={{ background: rating.bg, border: `1px solid ${rating.color}30` }}>
-          <div className="absolute inset-0 opacity-10"
-            style={{ background: `radial-gradient(circle at center, ${rating.color} 0%, transparent 70%)` }} />
+        <div
+          className="rounded-3xl p-8 text-center relative overflow-hidden"
+          style={{ background: rating.bg, border: `1px solid ${rating.color}35` }}
+        >
+          <div
+            className="absolute inset-0 opacity-15"
+            style={{ background: `radial-gradient(circle at 50% 0%, ${rating.color} 0%, transparent 65%)` }}
+          />
           <div className="relative z-10">
-            <p className="text-xs uppercase tracking-[0.3em] mb-3" style={{ color: rating.color, fontFamily: "'Orbitron', sans-serif" }}>
+            <p className="text-[10px] uppercase tracking-[0.35em] mb-4" style={{ color: rating.color, fontFamily: "'Orbitron', sans-serif" }}>
               Performance Rating
             </p>
-            <div className="text-8xl font-black mb-2" style={{ fontFamily: "'Orbitron', sans-serif", color: rating.color, textShadow: `0 0 40px ${rating.color}60` }}>
-              {rating.label}
+            <div className="flex items-center justify-center gap-6 mb-4">
+              <div
+                className="text-7xl sm:text-8xl font-black leading-none"
+                style={{ fontFamily: "'Orbitron', sans-serif", color: rating.color, textShadow: `0 0 40px ${rating.color}60` }}
+              >
+                {rating.label}
+              </div>
+              <div className="w-px h-16 bg-white/10" />
+              <div className="text-left">
+                <p className="text-[10px] uppercase tracking-[0.25em] text-[#8b93a7] mb-1">综合瞄准评分</p>
+                <p className="text-4xl font-bold text-glow-accent" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                  {Math.round(aimScore)}
+                  <span className="text-lg text-[#8b93a7]">/100</span>
+                </p>
+              </div>
             </div>
-            <p className="text-[#8892b0] text-sm">
-              综合评分 {Math.round(overallScore)} · {rating.label === 'S' ? '超凡表现' : rating.label === 'A' ? '稳定发挥' : rating.label === 'B' ? '还有提升空间' : '需要调整设置'}
+            <p className="text-sm text-[#8b93a7]">
+              四维评估：静态精度 · 动态跟枪 · 甩枪瞬狙 · 平滑跟枪
             </p>
           </div>
         </div>
 
-        {/* ── Row 1: Accuracy + Reaction ──────────── */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* ── Row 1: 精度 / 反应 / 甩枪 ──────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <GlassCard className="p-5">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-[#8892b0] mb-3" style={{ fontFamily: "'Orbitron', sans-serif" }}>
-              ◈ 精度评分
+            <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-3" style={{ fontFamily: "'Orbitron', sans-serif" }}>
+              ◈ 静态精度
             </p>
-            <span className="text-5xl font-bold text-glow-accent" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+            <span className="text-4xl font-bold text-glow-accent" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
               {Math.round(accuracy)}
             </span>
             <span className="text-lg text-[#00ff8860]">%</span>
             <div className="mt-3 h-1.5 rounded-full bg-white/5 overflow-hidden">
               <div className="h-full rounded-full progress-shimmer" style={{ width: `${accuracy}%` }} />
             </div>
-            <div className="flex gap-3 mt-2 text-xs">
-              <span>💀 <span style={{ color: '#ff4d4d' }}>{headshots}</span> <span className="text-[#8892b0]">爆头</span></span>
-              <span>🎯 <span style={{ color: '#fff' }}>{bodyHits}</span> <span className="text-[#8892b0]">身体</span></span>
-              <span className="text-[#8892b0]">{totalHits}/{staticResults.length} 命中</span>
+            <div className="flex gap-3 mt-3 text-xs">
+              <span>💀 <span style={{ color: '#ff4d4d' }}>{headshots}</span> <span className="text-[#8b93a7]">爆头</span></span>
+              <span>🎯 <span style={{ color: '#fff' }}>{bodyHits}</span> <span className="text-[#8b93a7]">身体</span></span>
+              <span className="text-[#8b93a7]">{totalHits}/{staticResults.length} 命中</span>
             </div>
           </GlassCard>
 
           <GlassCard className="p-5">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-[#8892b0] mb-3" style={{ fontFamily: "'Orbitron', sans-serif" }}>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-3" style={{ fontFamily: "'Orbitron', sans-serif" }}>
               ⏱ 反应时间
             </p>
-            <span className="text-5xl font-bold text-glow-accent" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+            <span className="text-4xl font-bold text-glow-accent" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
               {avgReaction}
             </span>
-            <span className="text-lg text-[#8892b0]">ms</span>
+            <span className="text-lg text-[#8b93a7]">ms</span>
             <div className="flex gap-4 mt-3 text-xs">
-              <span className="text-[#8892b0]">最快 <span style={{ color: '#00ff88' }}>{Math.round(fastest)}ms</span></span>
-              <span className="text-[#8892b0]">最慢 <span style={{ color: '#ff6b35' }}>{Math.round(slowest)}ms</span></span>
+              <span className="text-[#8b93a7]">最快 <span style={{ color: '#00ff88' }}>{Math.round(fastest)}ms</span></span>
+              <span className="text-[#8b93a7]">最慢 <span style={{ color: '#ff6b35' }}>{Math.round(slowest)}ms</span></span>
+            </div>
+          </GlassCard>
+
+          <GlassCard className="p-5">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-3" style={{ fontFamily: "'Orbitron', sans-serif" }}>
+              ⚡ 甩枪精度
+            </p>
+            <span className="text-4xl font-bold" style={{ fontFamily: "'JetBrains Mono', monospace", color: '#22d3ee' }}>
+              {Math.round(flick.accuracy)}
+            </span>
+            <span className="text-lg text-[#8b93a7]">%</span>
+            <div className="flex gap-3 mt-3 text-xs">
+              <span className="text-[#8b93a7]">爆头 <span style={{ color: '#ff4d4d' }}>{flick.headshotRate}%</span></span>
+              <span className="text-[#8b93a7]">平均 <span style={{ color: '#00ff88' }}>{Math.round(flick.avgReactionTime)}ms</span></span>
+              <span className="text-[#8b93a7]">偏差 <span style={{ color: '#ffd700' }}>{flick.avgDistance}px</span></span>
             </div>
           </GlassCard>
         </div>
 
-        {/* ── Row 2: Tracking + Progress Ring ─────── */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* ── Row 2: 跟枪 + 平滑 ────────────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <GlassCard className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-[#8892b0]" style={{ fontFamily: "'Orbitron', sans-serif" }}>
-                🎯 追踪能力
+              <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7]" style={{ fontFamily: "'Orbitron', sans-serif" }}>
+                🎯 动态跟枪
               </p>
               <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ backgroundColor: `${trackGrade.color}20`, color: trackGrade.color, fontFamily: "'JetBrains Mono', monospace" }}>
                 {trackGrade.grade}
               </span>
             </div>
 
-            {/* Mini bar chart */}
             <div className="flex items-end justify-center gap-3 h-16 mb-3">
               {trackingResults.phaseResults.map((p, i) => {
                 const h = Math.max(6, (p.avgDistance / maxPhaseDist) * 60);
                 return (
                   <div key={p.phase} className="flex flex-col items-center gap-1">
-                    <span className="text-[10px] text-[#8892b0]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{Math.round(p.avgDistance)}</span>
-                    <div className="w-7 rounded-t transition-all duration-700 relative" style={{ height: h, background: `linear-gradient(to top, ${i === 0 ? '#ff6b35' : i === 1 ? '#ffaa44' : '#ff4d4d'}, transparent)` }}>
+                    <span className="text-[10px] text-[#8b93a7]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{Math.round(p.avgDistance)}</span>
+                    <div
+                      className="w-7 rounded-t transition-all duration-700 relative"
+                      style={{ height: h, background: `linear-gradient(to top, ${i === 0 ? '#ff6b35' : i === 1 ? '#ffaa44' : '#ff4d4d'}, transparent)` }}
+                    >
                       <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#ffd700', boxShadow: '0 0 6px #ffd700' }} />
                     </div>
-                    <span className="text-[10px] text-[#8892b0]">{PHASE_LABELS[i]}</span>
+                    <span className="text-[10px] text-[#8b93a7]">{PHASE_LABELS[i]}</span>
                   </div>
                 );
               })}
@@ -153,21 +241,23 @@ export default function ResultPanel({
 
             <div className="grid grid-cols-3 gap-1 text-center text-xs">
               <div>
-                <span className="text-[#8892b0]">连击 </span>
+                <span className="text-[#8b93a7]">连击 </span>
                 <span style={{ color: '#ffd700', fontFamily: "'JetBrains Mono', monospace" }}>{trackingResults.maxCombo}</span>
               </div>
               <div>
-                <span className="text-[#8892b0]">距离 </span>
+                <span className="text-[#8b93a7]">距离 </span>
                 <span style={{ color: '#00ff88', fontFamily: "'JetBrains Mono', monospace" }}>{Math.round(trackingResults.avgDistance)}px</span>
               </div>
               <div>
-                <span className="text-[#8892b0]">爆头率 </span>
+                <span className="text-[#8b93a7]">爆头率 </span>
                 <span style={{ color: '#ff4d4d', fontFamily: "'JetBrains Mono', monospace" }}>{Math.round(headshotTrackRatio)}%</span>
               </div>
             </div>
 
-            <button onClick={() => setTrackingExpanded(!trackingExpanded)}
-              className="w-full text-[10px] text-[#8892b0] hover:text-[#00ff88] mt-3 pt-2 border-t border-white/5 transition-colors cursor-pointer">
+            <button
+              onClick={() => setTrackingExpanded(!trackingExpanded)}
+              className="w-full text-[10px] text-[#8b93a7] hover:text-[#00ff88] mt-3 pt-2 border-t border-white/5 transition-colors cursor-pointer"
+            >
               {trackingExpanded ? '▲ 收起' : '▼ 展开详情'}
             </button>
 
@@ -175,11 +265,11 @@ export default function ResultPanel({
               <div className="mt-2 space-y-1.5">
                 {trackingResults.phaseResults.map((p, i) => (
                   <div key={p.phase} className="flex justify-between text-xs px-3 py-1.5 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                    <span className="text-[#8892b0]">阶段{PHASE_LABELS[i]}</span>
+                    <span className="text-[#8b93a7]">阶段{PHASE_LABELS[i]}</span>
                     <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>
                       <span className="text-[#ffd700]">{p.score}分</span>
                       {' '}
-                      <span className="text-[#8892b0]">{p.avgDistance}px</span>
+                      <span className="text-[#8b93a7]">{p.avgDistance}px</span>
                       {' '}
                       <span style={{ color: '#ff4d4d' }}>{p.perfectRatio}%</span>
                     </span>
@@ -190,19 +280,59 @@ export default function ResultPanel({
           </GlassCard>
 
           <GlassCard className="p-5 flex flex-col items-center justify-center">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-[#8892b0] mb-4" style={{ fontFamily: "'Orbitron', sans-serif" }}>
-              ◉ 综合评分
+            <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-4" style={{ fontFamily: "'Orbitron', sans-serif" }}>
+              ◉ 平滑跟枪稳定度
             </p>
-            <ProgressRing progress={overallScore} size={130} strokeWidth={8} color={rating.color} />
-            <p className="text-sm font-bold mt-2" style={{ color: rating.color, fontFamily: "'Orbitron', sans-serif" }}>
-              {rating.label}级
-            </p>
+            <ProgressRing progress={smoothResults.stability} size={130} strokeWidth={8} color={smoothResults.stability >= 80 ? '#00ff88' : smoothResults.stability >= 60 ? '#ffd700' : '#ff6b35'} />
+            <div className="flex gap-4 mt-3 text-xs">
+              <span className="text-[#8b93a7]">平均偏差 <span style={{ color: '#00ff88' }}>{smoothResults.avgDistance}px</span></span>
+              <span className="text-[#8b93a7]">完美跟枪 <span style={{ color: '#ff4d4d' }}>{smoothResults.headshotRatio}%</span></span>
+            </div>
           </GlassCard>
         </div>
 
-        {/* ── DPI Card ──────────────────────────────── */}
-        <GlassCard className="p-6" highlight>
-          <p className="text-[10px] uppercase tracking-[0.2em] text-[#00ff88] mb-4" style={{ fontFamily: "'Orbitron', sans-serif" }}>
+        {/* ── 数据曲线 ──────────────────────────── */}
+        <GlassCard className="p-5">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-4" style={{ fontFamily: "'Orbitron', sans-serif" }}>
+            📈 数据曲线
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-[11px] text-[#8b93a7] mb-2 font-mono">反应时间分布（每次点击，ms）</p>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={reactionData} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <XAxis dataKey="shot" tick={{ fill: '#8b93a7', fontSize: 10 }} stroke="transparent" />
+                  <YAxis tick={{ fill: '#8b93a7', fontSize: 10 }} stroke="transparent" />
+                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(0,255,136,0.05)' }} />
+                  <Bar dataKey="ms" fill="#22d3ee" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div>
+              <p className="text-[11px] text-[#8b93a7] mb-2 font-mono">平滑跟枪偏差曲线（越贴近 0 越好）</p>
+              <ResponsiveContainer width="100%" height={180}>
+                <AreaChart data={smoothData} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="distGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#00ff88" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="#00ff88" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <XAxis dataKey="t" tick={{ fill: '#8b93a7', fontSize: 10 }} stroke="transparent" />
+                  <YAxis tick={{ fill: '#8b93a7', fontSize: 10 }} stroke="transparent" />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Area type="monotone" dataKey="dist" stroke="#00ff88" strokeWidth={2} fill="url(#distGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </GlassCard>
+
+        {/* ── DPI 建议 ──────────────────────────── */}
+        <GlassCard className="p-6">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-5" style={{ fontFamily: "'Orbitron', sans-serif" }}>
             ◆ DPI 建议
           </p>
 
@@ -213,18 +343,16 @@ export default function ResultPanel({
               { label: '综合 eDPI', value: userSettings.edpi, accent: true },
             ].map((item) => (
               <div key={item.label}>
-                <p className="text-[10px] text-[#8892b0] mb-1">{item.label}</p>
-                <p className="text-lg font-bold" style={{
-                  fontFamily: "'JetBrains Mono', monospace",
-                  color: item.accent ? '#ff6b35' : '#e0e0e0',
-                }}>{item.value}</p>
+                <p className="text-[10px] text-[#8b93a7] mb-1">{item.label}</p>
+                <p className="text-lg font-bold" style={{ fontFamily: "'JetBrains Mono', monospace", color: item.accent ? '#ff6b35' : '#e8ecf4' }}>
+                  {item.value}
+                </p>
               </div>
             ))}
           </div>
 
-          {/* Arrow transition */}
           <div className="flex items-center justify-center gap-4 mb-4">
-            <span className="text-2xl text-[#8892b0] line-through" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+            <span className="text-2xl text-[#8b93a7] line-through" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
               {userSettings.edpi}
             </span>
             <span className="text-2xl" style={{ color: '#00ff88' }}>→</span>
@@ -233,36 +361,39 @@ export default function ResultPanel({
             </span>
           </div>
 
-          <p className="text-xs text-[#8892b0] text-center mb-4">{dpiSuggestion.reason}</p>
+          <p className="text-xs text-[#8b93a7] text-center mb-4">{dpiSuggestion.reason}</p>
 
-          {/* Tab switch */}
           <div className="flex gap-1 mb-3 bg-white/5 rounded-lg p-1">
-            <button onClick={() => setDpiTab('sens')}
-              className="flex-1 py-1.5 text-xs rounded-md transition-all"
+            <button
+              onClick={() => setDpiTab('sens')}
+              className="flex-1 py-1.5 text-xs rounded-md transition-all cursor-pointer"
               style={{
                 background: dpiTab === 'sens' ? 'rgba(0,255,136,0.12)' : 'transparent',
-                color: dpiTab === 'sens' ? '#00ff88' : '#8892b0',
-              }}>
+                color: dpiTab === 'sens' ? '#00ff88' : '#8b93a7',
+              }}
+            >
               方案A: 改灵敏度
             </button>
-            <button onClick={() => setDpiTab('dpi')}
-              className="flex-1 py-1.5 text-xs rounded-md transition-all"
+            <button
+              onClick={() => setDpiTab('dpi')}
+              className="flex-1 py-1.5 text-xs rounded-md transition-all cursor-pointer"
               style={{
                 background: dpiTab === 'dpi' ? 'rgba(0,255,136,0.12)' : 'transparent',
-                color: dpiTab === 'dpi' ? '#00ff88' : '#8892b0',
-              }}>
+                color: dpiTab === 'dpi' ? '#00ff88' : '#8b93a7',
+              }}
+            >
               方案B: 改DPI
             </button>
           </div>
 
           <div className="px-4 py-3 rounded-lg text-xs" style={{ backgroundColor: 'rgba(0,255,136,0.06)' }}>
             {dpiTab === 'sens' ? (
-              <span className="text-[#8892b0]">
+              <span className="text-[#8b93a7]">
                 鼠标DPI保持 <span style={{ color: '#00ff88' }}>{userSettings.mouseDPI}</span>，游戏灵敏度改为{' '}
                 <span className="font-bold" style={{ color: '#00ff88', fontFamily: "'JetBrains Mono', monospace" }}>{suggestedGameSensitivity}</span>
               </span>
             ) : (
-              <span className="text-[#8892b0]">
+              <span className="text-[#8b93a7]">
                 游戏灵敏度保持 <span style={{ color: '#00ff88' }}>{userSettings.gameSensitivity}</span>，鼠标DPI改为{' '}
                 <span className="font-bold" style={{ color: '#00ff88', fontFamily: "'JetBrains Mono', monospace" }}>{suggestedMouseDPI}</span>
               </span>
@@ -300,8 +431,22 @@ export default function ResultPanel({
                     avgReactionTime: 0,
                     consistency: 0,
                   },
+                  {
+                    type: 'flick',
+                    clicks: flickResults.clicks,
+                    accuracy: flick.accuracy,
+                    avgReactionTime: flick.avgReactionTime,
+                    consistency: calculateConsistency(flickResults.clicks),
+                  },
+                  {
+                    type: 'smooth',
+                    clicks: [],
+                    accuracy: smoothResults.stability,
+                    avgReactionTime: 0,
+                    consistency: 0,
+                  },
                 ],
-                overallScore,
+                overallScore: aimScore,
                 recommendation: dpiSuggestion.reason,
               };
               saveSession(session);

@@ -1,71 +1,106 @@
-import type { ClickResult } from '../types/calibration';
+﻿import type { ClickResult } from '../types/calibration';
 
-/**
- * 计算命中精度，距离<15像素算命中，返回命中率(0-100)
- */
+/** 计算命中精度，距离<15像素算命中，返回命中率(0-100) */
 export function calculateAccuracy(clicks: ClickResult[]): number {
   if (clicks.length === 0) return 0;
-
   const hits = clicks.filter((c) => c.distance < 15).length;
   return (hits / clicks.length) * 100;
 }
 
-/**
- * 计算一致性，用反应时间的标准差来衡量，返回分数(0-100)
- *
- * 标准差越小说明操作越稳定，得分越高。
- * 标准差 >= 200ms → 0分，标准差趋近于0 → 100分。
- */
+/** 计算一致性：用反应时间的标准差来衡量，返回分数(0-100) */
 export function calculateConsistency(clicks: ClickResult[]): number {
   if (clicks.length < 2) return 0;
-
   const reactionTimes = clicks.map((c) => c.reactionTime);
   const mean = reactionTimes.reduce((sum, t) => sum + t, 0) / reactionTimes.length;
-  const variance =
-    reactionTimes.reduce((sum, t) => sum + (t - mean) ** 2, 0) / reactionTimes.length;
+  const variance = reactionTimes.reduce((sum, t) => sum + (t - mean) ** 2, 0) / reactionTimes.length;
   const stdDev = Math.sqrt(variance);
-
-  // 标准差>=200ms得0分，趋近0得100分，线性映射
   const score = Math.max(0, 100 - (stdDev / 200) * 100);
   return Math.round(score * 100) / 100;
 }
 
-/**
- * 根据当前DPI、精度和一致性给出建议DPI
- */
+/** 甩枪测试汇总：命中率、爆头率、平均偏差、平均反应时间 */
+export function calculateFlickScore(clicks: ClickResult[]) {
+  if (clicks.length === 0) {
+    return { accuracy: 0, headshotRate: 0, avgDistance: 0, avgReactionTime: 0 };
+  }
+  const hits = clicks.filter((c) => c.isHeadshot || c.isBodyHit).length;
+  const headshots = clicks.filter((c) => c.isHeadshot).length;
+  const avgDistance = clicks.reduce((s, c) => s + c.distance, 0) / clicks.length;
+  const avgReactionTime = clicks.reduce((s, c) => s + c.reactionTime, 0) / clicks.length;
+  return {
+    accuracy: Math.round((hits / clicks.length) * 1000) / 10,
+    headshotRate: Math.round((headshots / clicks.length) * 1000) / 10,
+    avgDistance: Math.round(avgDistance * 100) / 100,
+    avgReactionTime: Math.round(avgReactionTime * 100) / 100,
+  };
+}
+
+/** 平滑跟枪稳定度：基于相邻帧偏差的抖动，抖动越小越稳 (0-100) */
+export function calculateSmoothStability(distances: number[]): number {
+  if (distances.length < 3) return 0;
+  let jitter = 0;
+  let count = 0;
+  for (let i = 1; i < distances.length; i++) {
+    const delta = Math.abs(distances[i] - distances[i - 1]);
+    if (delta < 200) {
+      jitter += delta;
+      count++;
+    }
+  }
+  const avgJitter = count > 0 ? jitter / count : 0;
+  const score = Math.max(0, Math.min(100, 100 - avgJitter * 4));
+  return Math.round(score * 100) / 100;
+}
+
+/** 综合瞄准评分：静态精度 25% + 静态一致性 15% + 甩枪精度 25% + 跟枪爆头率 20% + 平滑稳定度 15% */
+export function calculateAimScore(parts: {
+  staticAccuracy: number;
+  staticConsistency: number;
+  flickAccuracy: number;
+  trackingRatio: number;
+  smoothStability: number;
+}): number {
+  const score =
+    parts.staticAccuracy * 0.25 +
+    parts.staticConsistency * 0.15 +
+    parts.flickAccuracy * 0.25 +
+    parts.trackingRatio * 0.2 +
+    parts.smoothStability * 0.15;
+  return Math.round(score * 100) / 100;
+}
+
+/** 根据当前 eDPI、精度、一致性与综合瞄准评分给出建议 eDPI */
 export function suggestDPI(
   currentDPI: number,
   accuracy: number,
   consistency: number,
+  aimScore?: number,
 ): { suggestedDPI: number; reason: string } {
+  const perf = aimScore ?? (accuracy * 0.6 + consistency * 0.4);
   let multiplier: number;
   let reason: string;
 
-  if (accuracy < 60) {
+  if (perf < 60) {
     multiplier = 0.85;
-    reason = '精度偏低（<60%），建议降低灵敏度以提高控制力';
-  } else if (accuracy >= 60 && accuracy <= 80 && consistency < 60) {
-    multiplier = 0.9;
-    reason = '精度尚可但手不够稳（一致性<60），建议适当降低DPI';
-  } else if (accuracy > 80 && consistency > 80) {
-    multiplier = 1;
-    reason = '精度和稳定性都很好，当前DPI适合你';
+    reason = '综合表现偏低（<60），建议降低灵敏度以提升控制力';
+  } else if (perf < 75) {
+    multiplier = 0.92;
+    reason = '表现中等偏下，建议略微降低灵敏度换取更稳的操控';
+  } else if (perf >= 88) {
+    multiplier = 1.06;
+    reason = '控制力出色，可以小幅提高灵敏度挖掘更大潜力';
   } else {
-    multiplier = 1.05;
-    reason = '表现中等，建议微调以寻找更优手感';
+    multiplier = 1;
+    reason = '当前灵敏度比较合适，建议保持并继续打磨';
   }
 
   let suggestedDPI = Math.round(currentDPI * multiplier);
-
-  // 限制在 400-3200 范围
   suggestedDPI = Math.max(400, Math.min(3200, suggestedDPI));
 
   return { suggestedDPI, reason };
 }
 
-/**
- * 综合评分 = 精度*0.6 + 一致性*0.4
- */
+/** 综合评分 = 精度*0.6 + 一致性*0.4 */
 export function calculateOverallScore(accuracy: number, consistency: number): number {
   return Math.round((accuracy * 0.6 + consistency * 0.4) * 100) / 100;
 }

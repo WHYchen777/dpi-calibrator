@@ -168,7 +168,7 @@ function Overlay({
             <span className="ml-1 text-sm font-bold" style={{ fontFamily: "'JetBrains Mono', monospace", color: '#ffd700' }}>{score}</span>
           </div>
           <span className="text-[10px] uppercase tracking-[0.3em] text-[#00ff8860]" style={{ fontFamily: "'Orbitron', sans-serif" }}>
-            追踪测试
+            动态跟枪
           </span>
         </div>
       </div>
@@ -475,7 +475,6 @@ function TrackingTest({ onComplete, gameType }: TrackingTestProps) {
     ctx.fillStyle = 'rgba(15, 15, 35, 0.88)';
     ctx.fillRect(0, 0, w, h);
     drawGrid(ctx, w, h);
-    drawCrosshairStyled(ctx, w / 2, h / 2, crosshair.settings);
 
     // 拖尾
     for (const t of trailRef.current) {
@@ -505,13 +504,7 @@ function TrackingTest({ onComplete, gameType }: TrackingTestProps) {
 
     // 十字准星
     if (mouse.active) {
-      const cs = 12;
-      ctx.strokeStyle = 'rgba(0, 255, 136, 0.35)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(mouse.x - cs, mouse.y); ctx.lineTo(mouse.x + cs, mouse.y);
-      ctx.moveTo(mouse.x, mouse.y - cs); ctx.lineTo(mouse.x, mouse.y + cs);
-      ctx.stroke();
+      drawCrosshairStyled(ctx, mouse.x, mouse.y, crosshair.settings);
       // 距离环
       ctx.beginPath();
       ctx.arc(mouse.x, mouse.y, HEADSHOT_THRESHOLD, 0, Math.PI * 2);
@@ -568,7 +561,7 @@ function TrackingTest({ onComplete, gameType }: TrackingTestProps) {
         style={{ touchAction: 'none' }}
       />
 
-      {countingDown && <CountdownOverlay onFinish={handleCountdownFinish} />}
+      {countingDown && <CountdownOverlay title="动态跟枪测试" onFinish={handleCountdownFinish} />}
 
       <Overlay
         timeLeft={timeLeft}

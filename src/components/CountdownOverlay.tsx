@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { playCountdownTick, playCountdownGo } from '../utils/soundEngine';
 
 interface CountdownOverlayProps {
   seconds?: number;
+  title?: string;
   onFinish: () => void;
 }
 
-export default function CountdownOverlay({ seconds = 3, onFinish }: CountdownOverlayProps) {
+export default function CountdownOverlay({ seconds = 3, title, onFinish }: CountdownOverlayProps) {
   const [display, setDisplay] = useState(seconds);
   const [phase, setPhase] = useState<'count' | 'go' | 'done'>('count');
   const [animKey, setAnimKey] = useState(0);
@@ -76,22 +77,32 @@ export default function CountdownOverlay({ seconds = 3, onFinish }: CountdownOve
   return (
     <div
       className="absolute inset-0 flex items-center justify-center pointer-events-none z-20"
-      style={{ backgroundColor: 'rgba(10,10,15,0.7)' }}
+      style={{ backgroundColor: 'rgba(6,7,12,0.72)', backdropFilter: 'blur(6px)' }}
     >
-      <span
-        key={animKey}
-        className="font-black text-glow-accent animate-[countdownPop_0.8s_ease-out]"
-        style={{
-          fontFamily: "'Orbitron', sans-serif",
-          fontSize: phase === 'go' ? '7rem' : '10rem',
-          color: phase === 'go' ? '#00ff88' : undefined,
-          textShadow: phase === 'go'
-            ? '0 0 40px #00ff88, 0 0 80px #00ff8860, 0 0 120px #00ff8830'
-            : undefined,
-        }}
-      >
-        {phase === 'go' ? 'GO!' : display}
-      </span>
+      <div className="flex flex-col items-center">
+        {title && (
+          <p
+            className="mb-6 text-sm tracking-[0.4em] uppercase text-[#8b93a7]"
+            style={{ fontFamily: "'Orbitron', sans-serif" }}
+          >
+            {title}
+          </p>
+        )}
+        <span
+          key={animKey}
+          className="font-black text-glow-accent animate-[countdownPop_0.8s_ease-out]"
+          style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: phase === 'go' ? '7rem' : '10rem',
+            color: phase === 'go' ? '#00ff88' : undefined,
+            textShadow: phase === 'go'
+              ? '0 0 40px #00ff88, 0 0 80px #00ff8860, 0 0 120px #00ff8830'
+              : undefined,
+          }}
+        >
+          {phase === 'go' ? 'GO!' : display}
+        </span>
+      </div>
     </div>
   );
 }

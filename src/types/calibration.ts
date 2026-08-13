@@ -1,4 +1,4 @@
-export type TestType = 'static' | 'tracking' | 'flick';
+﻿export type TestType = 'static' | 'tracking' | 'flick' | 'smooth';
 
 export interface ClickResult {
   x: number;
@@ -51,5 +51,21 @@ export interface TrackingResultData {
   distances: number[];
   avgDistance: number;
   headshotTrackingRatio: number;
+  totalFrames: number;
+}
+
+export interface FlickResultData {
+  clicks: ClickResult[];
+  accuracy: number;
+  headshotRate: number;
+  avgDistance: number;
+  avgReactionTime: number;
+}
+
+export interface SmoothResultData {
+  avgDistance: number;
+  stability: number;
+  headshotRatio: number;
+  distances: number[];
   totalFrames: number;
 }

@@ -1,6 +1,4 @@
-import { useRef, useEffect } from 'react';
-
-// ── Types ────────────────────────────────────────────────────
+﻿import { useRef, useEffect } from 'react';
 
 interface Particle {
   x: number;
@@ -8,48 +6,19 @@ interface Particle {
   vx: number;
   vy: number;
   size: number;
-  color: string;  // '#00ff88' or '#7c3aed'
+  color: string;
   alpha: number;
   alphaDir: number;
 }
 
-// ── Constants ────────────────────────────────────────────────
-
-const PARTICLE_COUNT = 40;
-const GRID_SPACING = 80;
-const CONNECTION_DIST = 100;
-const MOUSE_RANGE = 150;
-
-// ── Helpers ──────────────────────────────────────────────────
-
-function drawRadialGradient(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // Base gradient: top-left dark to bottom-right slightly purple
-  const grad = ctx.createRadialGradient(w * 0.35, h * 0.35, 0, w * 0.5, h * 0.5, Math.max(w, h));
-  grad.addColorStop(0, '#1a1a3e');   // center glow
-  grad.addColorStop(0.4, '#0f0f2e'); // mid
-  grad.addColorStop(1, '#0a0a1a');   // edges
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, h);
+interface Star {
+  x: number;
+  y: number;
+  size: number;
+  phase: number;
 }
 
-function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  ctx.strokeStyle = 'rgba(26, 26, 62, 0.15)';
-  ctx.lineWidth = 1;
-  for (let x = GRID_SPACING; x < w; x += GRID_SPACING) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, h);
-    ctx.stroke();
-  }
-  for (let y = GRID_SPACING; y < h; y += GRID_SPACING) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y);
-    ctx.stroke();
-  }
-}
-
-// ── Component ────────────────────────────────────────────────
+// ── 组件 ────────────────────────────────────────────────
 
 export default function AnimatedBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -62,12 +31,31 @@ export default function AnimatedBackground() {
 
     let w = window.innerWidth;
     let h = window.innerHeight;
-    let particles: Particle[] = [];
-    let mouseX = w / 2;
-    let mouseY = h / 2;
     let raf = 0;
+    let t = 0;
 
-    // ── Resize ─────────────────────────────────────────
+    const particles: Particle[] = [];
+    const stars: Star[] = [];
+    for (let i = 0; i < 34; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        size: 1 + Math.random() * 2,
+        color: i % 2 === 0 ? '#00ff88' : '#22d3ee',
+        alpha: 0.15 + Math.random() * 0.35,
+        alphaDir: Math.random() > 0.5 ? 1 : -1,
+      });
+    }
+    for (let i = 0; i < 80; i++) {
+      stars.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        size: Math.random() * 1.4,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
 
     const resize = () => {
       w = window.innerWidth;
@@ -76,36 +64,58 @@ export default function AnimatedBackground() {
       canvas.height = h;
     };
     resize();
-
-    // ── Init particles ─────────────────────────────────
-
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const isGreen = i < PARTICLE_COUNT / 2;
-      particles.push({
-        x: Math.random() * w,
-        y: Math.random() * h,
-        vx: (Math.random() - 0.5) * 0.5,   // 0.1–0.3 px/frame
-        vy: (Math.random() - 0.5) * 0.5,
-        size: 1 + Math.random() * 2,
-        color: isGreen ? '#00ff88' : '#7c3aed',
-        alpha: 0.2 + Math.random() * 0.4,
-        alphaDir: Math.random() > 0.5 ? 1 : -1,
-      });
-    }
-
-    // ── Mouse ──────────────────────────────────────────
-
-    const onMouse = (e: MouseEvent) => {
-      mouseX = e.clientX;
-      mouseY = e.clientY;
-    };
-
     window.addEventListener('resize', resize);
-    window.addEventListener('mousemove', onMouse, { passive: true });
 
-    // ── Draw connections between nearby particles ──────
+    const animate = () => {
+      t += 0.005;
 
-    const drawConnections = () => {
+      // 底色
+      ctx.fillStyle = '#06070c';
+      ctx.fillRect(0, 0, w, h);
+
+      // 极光光斑
+      const g1 = ctx.createRadialGradient(
+        w * 0.25 + Math.sin(t) * w * 0.08,
+        h * 0.2 + Math.cos(t * 0.8) * h * 0.06,
+        0,
+        w * 0.25,
+        h * 0.2,
+        Math.max(w, h) * 0.55,
+      );
+      g1.addColorStop(0, 'rgba(0,255,136,0.10)');
+      g1.addColorStop(1, 'transparent');
+      ctx.fillStyle = g1;
+      ctx.fillRect(0, 0, w, h);
+
+      const g2 = ctx.createRadialGradient(
+        w * 0.8 + Math.cos(t * 0.7) * w * 0.06,
+        h * 0.75 + Math.sin(t * 0.9) * h * 0.05,
+        0,
+        w * 0.8,
+        h * 0.75,
+        Math.max(w, h) * 0.5,
+      );
+      g2.addColorStop(0, 'rgba(124,58,237,0.12)');
+      g2.addColorStop(1, 'transparent');
+      ctx.fillStyle = g2;
+      ctx.fillRect(0, 0, w, h);
+
+      // 网格
+      ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < w; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+      for (let y = 0; y < h; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+
+      // 星点闪烁
+      for (const s of stars) {
+        const a = 0.15 + 0.35 * (0.5 + 0.5 * Math.sin(t * 3 + s.phase));
+        ctx.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 粒子连线
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
           const a = particles[i];
@@ -113,100 +123,48 @@ export default function AnimatedBackground() {
           const dx = a.x - b.x;
           const dy = a.y - b.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < CONNECTION_DIST) {
-            const alpha = (1 - dist / CONNECTION_DIST) * 0.12;
-            const midColor = a.color === b.color ? a.color : '#ffffff';
+          if (dist < 110) {
+            const alpha = (1 - dist / 110) * 0.1;
+            ctx.strokeStyle = `rgba(148,163,184,${alpha.toFixed(3)})`;
+            ctx.lineWidth = 0.5;
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
             ctx.lineTo(b.x, b.y);
-            ctx.strokeStyle = midColor + alpha.toString(16).padStart(2, '0');
-            ctx.lineWidth = 0.5;
             ctx.stroke();
           }
         }
-      }
-    };
-
-    // ── Animate ────────────────────────────────────────
-
-    const animate = () => {
-      ctx.clearRect(0, 0, w, h);
-
-      // Layer 1: radial gradient
-      drawRadialGradient(ctx, w, h);
-
-      // Layer 2: grid
-      drawGrid(ctx, w, h);
-
-      // Layer 3: particles + connections
-      drawConnections();
-
-      for (const p of particles) {
-        // Move
+        const p = particles[i];
         p.x += p.vx;
         p.y += p.vy;
-
-        // Bounce at edges
-        if (p.x <= 0)   { p.x = 0;   p.vx = Math.abs(p.vx); }
-        if (p.x >= w)   { p.x = w;   p.vx = -Math.abs(p.vx); }
-        if (p.y <= 0)   { p.y = 0;   p.vy = Math.abs(p.vy); }
-        if (p.y >= h)   { p.y = h;   p.vy = -Math.abs(p.vy); }
-
-        // Mouse attraction
-        const dx = mouseX - p.x;
-        const dy = mouseY - p.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < MOUSE_RANGE && dist > 0) {
-          const force = (1 - dist / MOUSE_RANGE) * 0.35;
-          p.vx += (dx / dist) * force;
-          p.vy += (dy / dist) * force;
-          // Dampen to avoid runaway speed
-          const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-          if (speed > 1.2) {
-            const scale = 1.2 / speed;
-            p.vx *= scale;
-            p.vy *= scale;
-          }
-        }
-
-        // Alpha pulse
-        p.alpha += p.alphaDir * 0.002;
-        if (p.alpha > 0.6) p.alphaDir = -1;
-        if (p.alpha < 0.15) p.alphaDir = 1;
-
-        // Draw particle
-        const alphaHex = Math.round(p.alpha * 255).toString(16).padStart(2, '0');
-
-        // Glow aura
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
-        ctx.fillStyle = p.color + Math.round(p.alpha * 0.4 * 255).toString(16).padStart(2, '0');
-        ctx.fill();
-
-        // Core
+        if (p.x < 0 || p.x > w) p.vx *= -1;
+        if (p.y < 0 || p.y > h) p.vy *= -1;
+        p.alpha += p.alphaDir * 0.005;
+        if (p.alpha > 0.5) { p.alpha = 0.5; p.alphaDir = -1; }
+        if (p.alpha < 0.1) { p.alpha = 0.1; p.alphaDir = 1; }
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.alpha;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = p.color + alphaHex;
         ctx.fill();
+        ctx.globalAlpha = 1;
       }
+
+      // 暗角
+      const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.75);
+      vg.addColorStop(0, 'transparent');
+      vg.addColorStop(1, 'rgba(0,0,0,0.5)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, w, h);
 
       raf = requestAnimationFrame(animate);
     };
-
     raf = requestAnimationFrame(animate);
 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
-      window.removeEventListener('mousemove', onMouse);
     };
   }, []);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0"
-      style={{ zIndex: -1 }}
-    />
-  );
+  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }} />;
 }
