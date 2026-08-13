@@ -4,6 +4,7 @@ import { playHeadshotSound, playBodyHitSound, playMissSound, playCompleteSound }
 import CountdownOverlay from './CountdownOverlay';
 import { useCrosshair, drawCrosshairStyled } from '../hooks/useCrosshair';
 import AnimatedBackground from './AnimatedBackground';
+import FpsHudFrame from './FpsHudFrame';
 
 type GameType = 'valorant' | 'csgo' | 'apex' | 'overwatch' | 'other';
 type HitResult = 'headshot' | 'hit' | 'miss' | 'none';
@@ -575,6 +576,8 @@ function StaticClickTest({
         accuracy={accuracy}
         headshotRate={headshotRate}
       />
+
+      <FpsHudFrame label="STATIC · AIM TEST" />
     </div>
   );
 }

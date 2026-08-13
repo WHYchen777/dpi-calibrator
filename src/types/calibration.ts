@@ -9,6 +9,12 @@ export interface ClickResult {
   reactionTime: number;
   isHeadshot: boolean;
   isBodyHit: boolean;
+  /** 是否为甩枪测试中的微调射击 */
+  isMicro?: boolean;
+  /** 微调射击用时（ms） */
+  microTime?: number;
+  /** 甩枪 A/B 对比轮次 */
+  round?: 'A' | 'B';
 }
 
 export interface TestResult {
@@ -54,12 +60,32 @@ export interface TrackingResultData {
   totalFrames: number;
 }
 
+export interface FlickRoundResult {
+  round: 'A' | 'B';
+  sensMultiplier: number;
+  clicks: ClickResult[];
+  accuracy: number;
+  headshotRate: number;
+  avgDistance: number;
+  avgReactionTime: number;
+  /** 微调命中率（0-100） */
+  microHitRate: number;
+  /** 平均微调用时（ms） */
+  avgMicroTime: number;
+}
+
 export interface FlickResultData {
   clicks: ClickResult[];
   accuracy: number;
   headshotRate: number;
   avgDistance: number;
   avgReactionTime: number;
+  /** 灵敏度对比两轮数据 */
+  rounds: FlickRoundResult[];
+  /** 用户手感偏好 */
+  preference: 'A' | 'B' | 'equal' | null;
+  /** 偏好档位的灵敏度倍率 */
+  preferredMultiplier: number;
 }
 
 export interface SmoothResultData {

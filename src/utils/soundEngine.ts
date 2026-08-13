@@ -1,5 +1,6 @@
-/**
+﻿/**
  * Web Audio API sound engine — all sounds synthesized, no external files.
+ * 爆头音效参考 CS2 "dink" 风格：高频金属泛音 + 低频身体命中感。
  */
 
 let audioCtx: AudioContext | null = null;
@@ -37,10 +38,15 @@ function playTone(
   osc.stop(c.currentTime + duration);
 }
 
-/** Helper: noise burst */
-function playNoise(duration: number, volume: number, filterFreq?: number) {
+/** Helper: noise burst with optional filter */
+function playNoise(
+  duration: number,
+  volume: number,
+  filterFreq?: number,
+  filterType: BiquadFilterType = 'lowpass',
+) {
   const c = ctx();
-  const bufferSize = c.sampleRate * duration;
+  const bufferSize = Math.max(1, Math.floor(c.sampleRate * duration));
   const buffer = c.createBuffer(1, bufferSize, c.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < bufferSize; i++) {
@@ -53,41 +59,69 @@ function playNoise(duration: number, volume: number, filterFreq?: number) {
   gain.gain.setValueAtTime(volume, c.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + duration);
 
-  if (filterFreq) {
-    const filter = c.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(filterFreq, c.currentTime);
-    source.connect(filter);
-    filter.connect(gain);
-  } else {
-    source.connect(gain);
-  }
+  const filter = c.createBiquadFilter();
+  filter.type = filterType;
+  filter.frequency.setValueAtTime(filterFreq ?? c.sampleRate / 2, c.currentTime);
 
+  source.connect(filter);
+  filter.connect(gain);
   gain.connect(c.destination);
   source.start(c.currentTime);
   source.stop(c.currentTime + duration);
 }
 
+/** 金属 "dink" 音色：非谐波泛音堆叠 + 快速衰减 + 随机失谐 */
+function playDink(base: number, volume: number) {
+  const c = ctx();
+  const t0 = c.currentTime;
+  const master = c.createGain();
+  master.gain.setValueAtTime(0.0001, t0);
+  master.gain.exponentialRampToValueAtTime(volume, t0 + 0.004);
+  master.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+  master.connect(c.destination);
+  const partials = [1, 1.42, 2.03, 2.87];
+  partials.forEach((ratio, i) => {
+    const osc = c.createOscillator();
+    osc.type = 'sine';
+    osc.detune.value = (Math.random() * 2 - 1) * 14;
+    osc.frequency.setValueAtTime(base * ratio * (1 + (Math.random() * 2 - 1) * 0.012), t0);
+    const g = c.createGain();
+    g.gain.value = 1 / (i + 1.2);
+    osc.connect(g);
+    g.connect(master);
+    osc.start(t0);
+    osc.stop(t0 + 0.18);
+  });
+}
+
 // ── Public API ───────────────────────────────────────────────
 
-/** Headshot — heavy bass thud + click */
+/** 爆头（CS2 风格 dink）：清脆金属高音 + 低频身体撞击 */
 export function playHeadshotSound() {
-  playTone(80, 'sine', 0.15, 0.5, 30);
-  playNoise(0.08, 0.25, 3000);
-  // Sub-bass
-  playTone(50, 'sine', 0.2, 0.3, 25);
+  const pitch = 1850 + Math.random() * 260;
+  playDink(pitch, 0.55);
+  playNoise(0.03, 0.18, 4600, 'highpass');
+  playTone(92, 'sine', 0.17, 0.38, 40);
 }
 
-/** Body hit — crisp mid-frequency click */
+/** 身体命中 — 闷实的撞击感 + 轻微护甲摩擦 */
 export function playBodyHitSound() {
-  playTone(800, 'square', 0.06, 0.15, 400);
-  playNoise(0.04, 0.12, 6000);
+  playTone(300, 'triangle', 0.09, 0.3, 130);
+  playNoise(0.05, 0.14, 1600, 'lowpass');
+  playNoise(0.025, 0.08, 3400, 'bandpass');
 }
 
-/** Miss — dull low thud */
+/** 脱靶 — 轻微的空气声 */
 export function playMissSound() {
-  playTone(100, 'triangle', 0.12, 0.2, 50);
-  playNoise(0.06, 0.1, 800);
+  playTone(110, 'triangle', 0.11, 0.14, 55);
+  playNoise(0.06, 0.08, 750, 'lowpass');
+}
+
+/** 微调击杀确认 — 更亮的高频双响 */
+export function playMicroKillSound() {
+  playDink(2500 + Math.random() * 240, 0.5);
+  playTone(1150, 'sine', 0.12, 0.2, 850);
+  playNoise(0.03, 0.15, 5400, 'highpass');
 }
 
 /** Phase transition — rising sweep */

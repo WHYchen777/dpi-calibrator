@@ -3,6 +3,7 @@ import { playCompleteSound } from '../utils/soundEngine';
 import CountdownOverlay from './CountdownOverlay';
 import { useCrosshair, drawCrosshairStyled } from '../hooks/useCrosshair';
 import AnimatedBackground from './AnimatedBackground';
+import FpsHudFrame from './FpsHudFrame';
 import type { SmoothResultData } from '../types/calibration';
 
 type GameType = 'valorant' | 'csgo' | 'apex' | 'overwatch' | 'other';
@@ -256,6 +257,8 @@ export default function SmoothTrackingTest({ onComplete, gameType }: SmoothTrack
         stability={stability}
         headshotRatio={headshotRatio}
       />
+
+      <FpsHudFrame label="SMOOTH TRACK" />
     </div>
   );
 }

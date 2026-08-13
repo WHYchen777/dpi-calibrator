@@ -21,6 +21,7 @@ import FlickTest from './components/FlickTest';
 import SmoothTrackingTest from './components/SmoothTrackingTest';
 import ResultPanel from './components/ResultPanel';
 import AnimatedBackground from './components/AnimatedBackground';
+import MouseTrail from './components/MouseTrail';
 import GlowButton from './components/GlowButton';
 import GlassCard from './components/GlassCard';
 import CrosshairSettings from './components/CrosshairSettings';
@@ -41,7 +42,7 @@ const GAME_OPTIONS: { value: UserSettings['gameType']; label: string; icon: Reac
 const TEST_STEPS: { key: TestPhase; label: string; desc: string; icon: ReactNode }[] = [
   { key: 'static', label: '静态精度', desc: '定位 + 反应', icon: <Crosshair size={14} /> },
   { key: 'tracking', label: '动态跟枪', desc: '追踪能力', icon: <Target size={14} /> },
-  { key: 'flick', label: '甩枪瞬狙', desc: '快速瞄准', icon: <Rocket size={14} /> },
+  { key: 'flick', label: '甩枪瞬狙', desc: '反应 + 微调', icon: <Rocket size={14} /> },
   { key: 'smooth', label: '平滑跟枪', desc: '稳定操控', icon: <Activity size={14} /> },
 ];
 
@@ -145,6 +146,7 @@ function App() {
     return (
       <div className="relative min-h-screen flex items-center justify-center overflow-hidden py-12">
         <AnimatedBackground />
+        <MouseTrail />
 
         <div className="relative z-10 w-full max-w-xl mx-auto px-5">
           {/* Header */}
@@ -298,6 +300,7 @@ function App() {
   if (currentStep === 'testing') {
     return (
       <>
+        <MouseTrail />
         {testPhase === 'static' && (
           <StaticClickTest onComplete={handleStaticComplete} gameType={userSettings.gameType} />
         )}
@@ -319,6 +322,7 @@ function App() {
     return (
       <div className="relative min-h-screen">
         <AnimatedBackground />
+        <MouseTrail />
         <div className="relative z-10">
           <ResultPanel
             staticResults={staticResults}

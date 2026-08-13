@@ -20,16 +20,18 @@ export function calculateConsistency(clicks: ClickResult[]): number {
 
 /** 甩枪测试汇总：命中率、爆头率、平均偏差、平均反应时间 */
 export function calculateFlickScore(clicks: ClickResult[]) {
-  if (clicks.length === 0) {
+  // 排除微调射击，只统计甩枪主射击
+  const main = clicks.filter((c) => !c.isMicro);
+  if (main.length === 0) {
     return { accuracy: 0, headshotRate: 0, avgDistance: 0, avgReactionTime: 0 };
   }
-  const hits = clicks.filter((c) => c.isHeadshot || c.isBodyHit).length;
-  const headshots = clicks.filter((c) => c.isHeadshot).length;
-  const avgDistance = clicks.reduce((s, c) => s + c.distance, 0) / clicks.length;
-  const avgReactionTime = clicks.reduce((s, c) => s + c.reactionTime, 0) / clicks.length;
+  const hits = main.filter((c) => c.isHeadshot || c.isBodyHit).length;
+  const headshots = main.filter((c) => c.isHeadshot).length;
+  const avgDistance = main.reduce((s, c) => s + c.distance, 0) / main.length;
+  const avgReactionTime = main.reduce((s, c) => s + c.reactionTime, 0) / main.length;
   return {
-    accuracy: Math.round((hits / clicks.length) * 1000) / 10,
-    headshotRate: Math.round((headshots / clicks.length) * 1000) / 10,
+    accuracy: Math.round((hits / main.length) * 1000) / 10,
+    headshotRate: Math.round((headshots / main.length) * 1000) / 10,
     avgDistance: Math.round(avgDistance * 100) / 100,
     avgReactionTime: Math.round(avgReactionTime * 100) / 100,
   };
@@ -103,4 +105,24 @@ export function suggestDPI(
 /** 综合评分 = 精度*0.6 + 一致性*0.4 */
 export function calculateOverallScore(accuracy: number, consistency: number): number {
   return Math.round((accuracy * 0.6 + consistency * 0.4) * 100) / 100;
+}
+
+/** 根据甩枪 A/B 灵敏度对比的偏好，微调建议 eDPI */
+export function adjustDPIByPreference(
+  suggestedDPI: number,
+  preference: 'A' | 'B' | 'equal' | null | undefined,
+): { dpi: number; note: string } {
+  if (preference === 'B') {
+    return {
+      dpi: Math.max(100, Math.round(suggestedDPI * 1.1)),
+      note: '你更偏好更快的 B 档（+20% 速度），建议值上浮 10%',
+    };
+  }
+  if (preference === 'A') {
+    return {
+      dpi: Math.max(100, Math.round(suggestedDPI * 0.96)),
+      note: '你更偏好当前速度的 A 档，建议值微降 4% 换取更稳控制',
+    };
+  }
+  return { dpi: suggestedDPI, note: '' };
 }

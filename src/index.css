@@ -404,3 +404,115 @@ body::before {
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, rgba(0, 255, 136, 0.6), rgba(34, 211, 238, 0.6));
 }
+
+﻿
+/* ══════════ FPS HUD 边框 ══════════ */
+
+.hud-frame {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.hud-corner {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border: 0 solid rgba(0, 255, 136, 0.6);
+  filter: drop-shadow(0 0 6px rgba(0, 255, 136, 0.35));
+}
+
+.hud-corner--tl { top: 10px; left: 10px; border-top-width: 2px; border-left-width: 2px; border-top-left-radius: 6px; }
+.hud-corner--tr { top: 10px; right: 10px; border-top-width: 2px; border-right-width: 2px; border-top-right-radius: 6px; }
+.hud-corner--bl { bottom: 10px; left: 10px; border-bottom-width: 2px; border-left-width: 2px; border-bottom-left-radius: 6px; }
+.hud-corner--br { bottom: 10px; right: 10px; border-bottom-width: 2px; border-right-width: 2px; border-bottom-right-radius: 6px; }
+
+.hud-topbar {
+  position: absolute;
+  top: 12px;
+  left: 56px;
+  right: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hud-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(0, 255, 136, 0.75);
+  font-family: var(--font-display);
+  padding: 4px 10px;
+  border: 1px solid rgba(0, 255, 136, 0.22);
+  border-radius: 999px;
+  background: rgba(6, 7, 12, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.hud-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00ff88;
+  box-shadow: 0 0 8px #00ff88;
+  animation: hudPulse 1.6s ease-in-out infinite;
+}
+
+.hud-label--top {
+  color: rgba(34, 211, 238, 0.85);
+  text-shadow: 0 0 12px rgba(34, 211, 238, 0.45);
+}
+
+.hud-bottombar {
+  position: absolute;
+  bottom: 12px;
+  left: 56px;
+  right: 56px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hud-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: rgba(232, 236, 244, 0.75);
+  font-family: var(--font-mono);
+  padding: 5px 10px;
+  border-left: 2px solid rgba(0, 255, 136, 0.5);
+  background: linear-gradient(90deg, rgba(0, 255, 136, 0.08), transparent);
+}
+
+.hud-slot--right {
+  border-left: none;
+  border-right: 2px solid rgba(34, 211, 238, 0.5);
+  background: linear-gradient(270deg, rgba(34, 211, 238, 0.08), transparent);
+  justify-content: flex-end;
+}
+
+@keyframes hudPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ══════════ 鼠标轨迹 ══════════ */
+
+.cursor-trail {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 5;
+}

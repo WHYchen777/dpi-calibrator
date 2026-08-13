@@ -3,6 +3,7 @@ import { playPhaseSound, playComboSound, playCompleteSound } from '../utils/soun
 import CountdownOverlay from './CountdownOverlay';
 import { useCrosshair, drawCrosshairStyled } from '../hooks/useCrosshair';
 import AnimatedBackground from './AnimatedBackground';
+import FpsHudFrame from './FpsHudFrame';
 
 type GameType = 'valorant' | 'csgo' | 'apex' | 'overwatch' | 'other';
 
@@ -571,6 +572,7 @@ function TrackingTest({ onComplete, gameType }: TrackingTestProps) {
         avgDistance={avgDistance}
       />
 
+      <FpsHudFrame label="TRACKING TEST" />
     </div>
   );
 }

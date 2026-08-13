@@ -9,6 +9,11 @@ import {
   CartesianGrid,
   AreaChart,
   Area,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
 } from 'recharts';
 import type {
   ClickResult,
@@ -23,6 +28,7 @@ import {
   calculateConsistency,
   calculateFlickScore,
   calculateAimScore,
+  adjustDPIByPreference,
   suggestDPI,
 } from '../utils/dpiAlgorithm';
 import { saveSession } from '../utils/storage';
@@ -98,8 +104,20 @@ export default function ResultPanel({
   const headshotTrackRatio = trackingResults.headshotTrackingRatio || 0;
   const trackGrade = getTrackingGrade(headshotTrackRatio);
 
-  const suggestedGameSensitivity = Math.round((dpiSuggestion.suggestedDPI / userSettings.mouseDPI) * 100) / 100;
-  const suggestedMouseDPI = Math.round(dpiSuggestion.suggestedDPI / userSettings.gameSensitivity);
+  // 甩枪 A/B 灵敏度对比数据（兼容旧记录：无 rounds 时仅显示整体）
+  const flickRoundA = flickResults.rounds?.find((r) => r.round === 'A') ?? null;
+  const flickRoundB = flickResults.rounds?.find((r) => r.round === 'B') ?? null;
+  const prefLabel =
+    flickResults.preference === 'B' ? 'B 档（+20% 速度）更顺手' :
+    flickResults.preference === 'A' ? 'A 档（当前速度）更顺手' :
+    flickResults.preference === 'equal' ? '两档手感接近' : '未对比';
+
+  const dpiAdjust = adjustDPIByPreference(dpiSuggestion.suggestedDPI, flickResults.preference ?? null);
+  const finalSuggestedDPI = dpiAdjust.dpi;
+  const dpiReason = dpiSuggestion.reason + (dpiAdjust.note ? ' · ' + dpiAdjust.note : '');
+
+  const suggestedGameSensitivity = Math.round((finalSuggestedDPI / userSettings.mouseDPI) * 100) / 100;
+  const suggestedMouseDPI = Math.round(finalSuggestedDPI / userSettings.gameSensitivity);
 
   const [dpiTab, setDpiTab] = useState<'sens' | 'dpi'>('sens');
   const [trackingExpanded, setTrackingExpanded] = useState(false);
@@ -119,6 +137,14 @@ export default function ResultPanel({
       .filter((_, i) => i % step === 0)
       .map((d, i) => ({ t: i, dist: Math.round(d * 10) / 10 }));
   }, [smoothResults]);
+
+  const radarData = [
+    { ability: '静态精度', value: Math.round(accuracy) },
+    { ability: '一致性', value: Math.round(consistency) },
+    { ability: '甩枪精度', value: Math.round(flick.accuracy) },
+    { ability: '跟枪爆头', value: Math.round(headshotTrackRatio) },
+    { ability: '平滑稳定', value: Math.round(smoothResults.stability) },
+  ];
 
   return (
     <div className="min-h-screen py-8 px-4 animate-fade-slide">
@@ -195,17 +221,44 @@ export default function ResultPanel({
 
           <GlassCard className="p-5">
             <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-3" style={{ fontFamily: "'Orbitron', sans-serif" }}>
-              ⚡ 甩枪精度
+              ⚡ 甩枪精度 · A/B 对比
             </p>
             <span className="text-4xl font-bold" style={{ fontFamily: "'JetBrains Mono', monospace", color: '#22d3ee' }}>
               {Math.round(flick.accuracy)}
             </span>
             <span className="text-lg text-[#8b93a7]">%</span>
             <div className="flex gap-3 mt-3 text-xs">
-              <span className="text-[#8b93a7]">爆头 <span style={{ color: '#ff4d4d' }}>{flick.headshotRate}%</span></span>
-              <span className="text-[#8b93a7]">平均 <span style={{ color: '#00ff88' }}>{Math.round(flick.avgReactionTime)}ms</span></span>
+              <span className="text-[#8b93a7]">击杀 <span style={{ color: '#ff4d4d' }}>{flick.headshotRate}%</span></span>
+              <span className="text-[#8b93a7]">反应 <span style={{ color: '#00ff88' }}>{Math.round(flick.avgReactionTime)}ms</span></span>
               <span className="text-[#8b93a7]">偏差 <span style={{ color: '#ffd700' }}>{flick.avgDistance}px</span></span>
             </div>
+            {flickRoundA && flickRoundB && (
+              <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+                <p className="text-[9px] uppercase tracking-[0.2em] text-[#8b93a7]">灵敏度对比</p>
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className="w-16 text-[#8b93a7]">A ×1.00</span>
+                  <div className="flex-1 h-1 rounded bg-white/5 overflow-hidden">
+                    <div className="h-full rounded" style={{ width: Math.round(flickRoundA.accuracy) + '%', background: '#00ff88' }} />
+                  </div>
+                  <span className="w-10 text-right font-mono" style={{ color: '#00ff88' }}>{Math.round(flickRoundA.accuracy)}%</span>
+                </div>
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className="w-16 text-[#8b93a7]">B ×1.20</span>
+                  <div className="flex-1 h-1 rounded bg-white/5 overflow-hidden">
+                    <div className="h-full rounded" style={{ width: Math.round(flickRoundB.accuracy) + '%', background: '#22d3ee' }} />
+                  </div>
+                  <span className="w-10 text-right font-mono" style={{ color: '#22d3ee' }}>{Math.round(flickRoundB.accuracy)}%</span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-[#8b93a7]">微调命中</span>
+                  <span className="font-mono" style={{ color: '#ffd700' }}>A {flickRoundA.microHitRate}% · B {flickRoundB.microHitRate}%</span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-[#8b93a7]">偏好</span>
+                  <span className="font-mono" style={{ color: '#a78bfa' }}>{prefLabel}</span>
+                </div>
+              </div>
+            )}
           </GlassCard>
         </div>
 
@@ -291,6 +344,38 @@ export default function ResultPanel({
           </GlassCard>
         </div>
 
+        {/* ── 能力雷达图 ──────────────────────── */}
+        <GlassCard className="p-5">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-4" style={{ fontFamily: "'Orbitron', sans-serif" }}>
+            🕸 能力雷达图
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={radarData} outerRadius="72%">
+                  <PolarGrid stroke="rgba(255,255,255,0.12)" />
+                  <PolarAngleAxis dataKey="ability" tick={{ fill: '#8b93a7', fontSize: 11, fontFamily: "'JetBrains Mono', monospace" }} />
+                  <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                  <Radar name="能力" dataKey="value" stroke="#00ff88" fill="rgba(0,255,136,0.28)" fillOpacity={0.7} strokeWidth={2} dot={{ r: 3, fill: '#00ff88' }} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2.5">
+              {radarData.map((d) => (
+                <div key={d.ability} className="flex items-center gap-3 text-xs">
+                  <span className="w-16 text-[#8b93a7]">{d.ability}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                    <div className="h-full rounded-full progress-shimmer" style={{ width: d.value + '%' }} />
+                  </div>
+                  <span className="w-8 text-right font-mono" style={{ color: '#00ff88' }}>{d.value}</span>
+                </div>
+              ))}
+              <p className="text-[10px] text-[#8b93a7]/70 pt-1">维度越饱满代表综合瞄准能力越均衡</p>
+            </div>
+          </div>
+        </GlassCard>
+
         {/* ── 数据曲线 ──────────────────────────── */}
         <GlassCard className="p-5">
           <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b93a7] mb-4" style={{ fontFamily: "'Orbitron', sans-serif" }}>
@@ -357,11 +442,11 @@ export default function ResultPanel({
             </span>
             <span className="text-2xl" style={{ color: '#00ff88' }}>→</span>
             <span className="text-4xl font-bold text-glow-accent" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-              {dpiSuggestion.suggestedDPI}
+              {finalSuggestedDPI}
             </span>
           </div>
 
-          <p className="text-xs text-[#8b93a7] text-center mb-4">{dpiSuggestion.reason}</p>
+          <p className="text-xs text-[#8b93a7] text-center mb-4">{dpiReason}</p>
 
           <div className="flex gap-1 mb-3 bg-white/5 rounded-lg p-1">
             <button
@@ -410,7 +495,7 @@ export default function ResultPanel({
                 id: Date.now().toString(36),
                 date: new Date().toISOString(),
                 currentDPI: userSettings.edpi,
-                suggestedDPI: dpiSuggestion.suggestedDPI,
+                suggestedDPI: finalSuggestedDPI,
                 tests: [
                   {
                     type: 'static',
@@ -436,7 +521,7 @@ export default function ResultPanel({
                     clicks: flickResults.clicks,
                     accuracy: flick.accuracy,
                     avgReactionTime: flick.avgReactionTime,
-                    consistency: calculateConsistency(flickResults.clicks),
+                    consistency: calculateConsistency(flickResults.clicks.filter((c) => !c.isMicro)),
                   },
                   {
                     type: 'smooth',
@@ -447,7 +532,7 @@ export default function ResultPanel({
                   },
                 ],
                 overallScore: aimScore,
-                recommendation: dpiSuggestion.reason,
+                recommendation: dpiReason,
               };
               saveSession(session);
               setSaved(true);
